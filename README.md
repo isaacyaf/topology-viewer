@@ -1,5 +1,7 @@
 # Data Center Topology Viewer
 
+![Demo screenshot](docs/demo.png)
+
 Editable data center topology viewer with a React Flow frontend and FastAPI backend (front/back separated).
 
 ## Status
