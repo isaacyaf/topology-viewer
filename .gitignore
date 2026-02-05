@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.db
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.log
+coverage/
+htmlcov/
+
+# Node
+node_modules/
+dist/
+.npm/
+.pnpm-store/
+
+# Misc
+.env
+.env.local
+.DS_Store
+.idea/
+.vscode/
