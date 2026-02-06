@@ -98,10 +98,14 @@ const CustomNode = memo(({ data }) => {
 
   return (
     <div className="custom-node" style={{ borderColor: config.color }}>
-      <Handle id="left" type="target" position={Position.Left} />
-      <Handle id="right" type="source" position={Position.Right} />
-      <Handle id="top" type="source" position={Position.Top} />
-      <Handle id="bottom" type="target" position={Position.Bottom} />
+      <Handle id="left-in" type="target" position={Position.Left} />
+      <Handle id="left-out" type="source" position={Position.Left} />
+      <Handle id="right-in" type="target" position={Position.Right} />
+      <Handle id="right-out" type="source" position={Position.Right} />
+      <Handle id="top-in" type="target" position={Position.Top} />
+      <Handle id="top-out" type="source" position={Position.Top} />
+      <Handle id="bottom-in" type="target" position={Position.Bottom} />
+      <Handle id="bottom-out" type="source" position={Position.Bottom} />
       <div className="node-icon" style={{ color: config.color }}>
         <Icon />
       </div>
@@ -219,6 +223,23 @@ export default function App() {
           }
         })
       }
+      if (topoTypeValue === 'butterfly') {
+        const stages = topoParamsValue.stages || 3
+        const width = topoParamsValue.width || 4
+        const spacingX = topoParamsValue.nodeSpacingX || 180
+        const spacingY = topoParamsValue.layerGap || 140
+        return inputNodes.map((node) => {
+          const match = node.id.match(/^s(\d+)-n(\d+)$/)
+        const stageIndex = match ? Number(match[1]) - 1 : 0
+          const nodeIndex = match ? Number(match[2]) - 1 : 0
+          const x = 140 + nodeIndex * spacingX
+        const y = 120 + stageIndex * spacingY
+          return {
+            ...node,
+            position: { x, y }
+          }
+        })
+      }
 
     const tierOf = (node) =>
       node.data?.tier ?? DEFAULT_TIER[node.data?.kind] ?? DEFAULT_TIER.server
@@ -284,8 +305,8 @@ export default function App() {
     if (topoTypeValue && topoTypeValue !== 'custom') {
       return inputEdges.map((edge) => ({
         ...edge,
-        sourceHandle: edge.sourceHandle || 'top',
-        targetHandle: edge.targetHandle || 'bottom'
+        sourceHandle: edge.sourceHandle || 'top-out',
+        targetHandle: edge.targetHandle || 'bottom-in'
       }))
     }
     return inputEdges

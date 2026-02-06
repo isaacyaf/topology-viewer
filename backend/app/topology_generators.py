@@ -21,13 +21,20 @@ def _node(node_id: str, label: str, kind: str, tier: int) -> dict:
     }
 
 
-def _edge(edge_id: str, source: str, target: str, label: str | None = "link") -> dict:
+def _edge(
+    edge_id: str,
+    source: str,
+    target: str,
+    label: str | None = "link",
+    source_handle: str = "top-out",
+    target_handle: str = "bottom-in",
+) -> dict:
     edge = {
         "id": edge_id,
         "source": source,
         "target": target,
-        "sourceHandle": "top",
-        "targetHandle": "bottom",
+        "sourceHandle": source_handle,
+        "targetHandle": target_handle,
     }
     if label:
         edge["label"] = label
@@ -257,8 +264,42 @@ def generate_torus_2d(rows: int, cols: int, kind: str) -> GeneratedTopology:
     for r, c in product(range(rows), range(cols)):
         right = (r, (c + 1) % cols)
         down = ((r + 1) % rows, c)
-        edges.append(_edge(f"e-{r}-{c}-r", ids[(r, c)], ids[right]))
-        edges.append(_edge(f"e-{r}-{c}-d", ids[(r, c)], ids[down]))
+        edges.append(
+            _edge(
+                f"e-{r}-{c}-r",
+                ids[(r, c)],
+                ids[right],
+                source_handle="right-out",
+                target_handle="left-in",
+            )
+        )
+        edges.append(
+            _edge(
+                f"e-{r}-{c}-l",
+                ids[(r, c)],
+                ids[(r, (c - 1) % cols)],
+                source_handle="left-out",
+                target_handle="right-in",
+            )
+        )
+        edges.append(
+            _edge(
+                f"e-{r}-{c}-d",
+                ids[(r, c)],
+                ids[down],
+                source_handle="bottom-out",
+                target_handle="top-in",
+            )
+        )
+        edges.append(
+            _edge(
+                f"e-{r}-{c}-u",
+                ids[(r, c)],
+                ids[((r - 1) % rows, c)],
+                source_handle="top-out",
+                target_handle="bottom-in",
+            )
+        )
     return GeneratedTopology(
         topo_type="torus-2d",
         params={"rows": rows, "cols": cols},
@@ -282,9 +323,60 @@ def generate_torus_3d(x: int, y: int, z: int, kind: str) -> GeneratedTopology:
         nx = ((i + 1) % x, j, k)
         ny = (i, (j + 1) % y, k)
         nz = (i, j, (k + 1) % z)
-        edges.append(_edge(f"e-{i}-{j}-{k}-x", ids[(i, j, k)], ids[nx]))
-        edges.append(_edge(f"e-{i}-{j}-{k}-y", ids[(i, j, k)], ids[ny]))
-        edges.append(_edge(f"e-{i}-{j}-{k}-z", ids[(i, j, k)], ids[nz]))
+        edges.append(
+            _edge(
+                f"e-{i}-{j}-{k}-x",
+                ids[(i, j, k)],
+                ids[nx],
+                source_handle="right-out",
+                target_handle="left-in",
+            )
+        )
+        edges.append(
+            _edge(
+                f"e-{i}-{j}-{k}-xn",
+                ids[(i, j, k)],
+                ids[((i - 1) % x, j, k)],
+                source_handle="left-out",
+                target_handle="right-in",
+            )
+        )
+        edges.append(
+            _edge(
+                f"e-{i}-{j}-{k}-y",
+                ids[(i, j, k)],
+                ids[ny],
+                source_handle="bottom-out",
+                target_handle="top-in",
+            )
+        )
+        edges.append(
+            _edge(
+                f"e-{i}-{j}-{k}-yn",
+                ids[(i, j, k)],
+                ids[(i, (j - 1) % y, k)],
+                source_handle="top-out",
+                target_handle="bottom-in",
+            )
+        )
+        edges.append(
+            _edge(
+                f"e-{i}-{j}-{k}-z",
+                ids[(i, j, k)],
+                ids[nz],
+                source_handle="right-out",
+                target_handle="left-in",
+            )
+        )
+        edges.append(
+            _edge(
+                f"e-{i}-{j}-{k}-zn",
+                ids[(i, j, k)],
+                ids[(i, j, (k - 1) % z)],
+                source_handle="left-out",
+                target_handle="right-in",
+            )
+        )
     return GeneratedTopology(
         topo_type="torus-3d",
         params={"x": x, "y": y, "z": z},
@@ -308,17 +400,69 @@ def generate_dragonfly(groups: int, routers_per_group: int, kind: str) -> Genera
             nodes.append(_node(node_id, f"G{g + 1} R{r + 1}", kind, tier=1))
         group_ids.append(ids)
 
+    grid_side = int(routers_per_group**0.5)
+    if grid_side * grid_side < routers_per_group:
+        grid_side += 1
+
     for ids in group_ids:
-        for i in range(len(ids)):
-            for j in range(i + 1, len(ids)):
-                edges.append(_edge(f"e-local-{ids[i]}-{ids[j]}", ids[i], ids[j]))
+        for idx in range(len(ids)):
+            row = idx // grid_side
+            col = idx % grid_side
+            right_idx = idx + 1
+            if col + 1 < grid_side and right_idx < len(ids):
+                edges.append(
+                    _edge(
+                        f"e-local-h-{ids[idx]}-{ids[right_idx]}",
+                        ids[idx],
+                        ids[right_idx],
+                        source_handle="right-out",
+                        target_handle="left-in",
+                    )
+                )
+                edges.append(
+                    _edge(
+                        f"e-local-hl-{ids[right_idx]}-{ids[idx]}",
+                        ids[right_idx],
+                        ids[idx],
+                        source_handle="left-out",
+                        target_handle="right-in",
+                    )
+                )
+            down_idx = idx + grid_side
+            if down_idx < len(ids):
+                edges.append(
+                    _edge(
+                        f"e-local-v-{ids[idx]}-{ids[down_idx]}",
+                        ids[idx],
+                        ids[down_idx],
+                        source_handle="bottom-out",
+                        target_handle="top-in",
+                    )
+                )
+                edges.append(
+                    _edge(
+                        f"e-local-vu-{ids[down_idx]}-{ids[idx]}",
+                        ids[down_idx],
+                        ids[idx],
+                        source_handle="top-out",
+                        target_handle="bottom-in",
+                    )
+                )
 
     for g in range(groups):
         for r in range(routers_per_group):
             src = group_ids[g][r]
             dst_group = (g + r + 1) % groups
             dst = group_ids[dst_group][r % routers_per_group]
-            edges.append(_edge(f"e-global-{src}-{dst}", src, dst))
+            edges.append(
+                _edge(
+                    f"e-global-{src}-{dst}",
+                    src,
+                    dst,
+                    source_handle="right-out",
+                    target_handle="left-in",
+                )
+            )
 
     return GeneratedTopology(
         topo_type="dragonfly",
@@ -340,16 +484,22 @@ def generate_butterfly(stages: int, width: int, kind: str) -> GeneratedTopology:
         for i in range(width):
             node_id = f"s{s + 1}-n{i + 1}"
             ids.append(node_id)
-            nodes.append(_node(node_id, f"S{s + 1} N{i + 1}", kind, tier=1))
+            node_kind = "asic" if s == 0 or s == stages - 1 else kind
+            nodes.append(_node(node_id, f"S{s + 1} N{i + 1}", node_kind, tier=1))
         stage_nodes.append(ids)
 
     for s in range(stages - 1):
-        for i in range(width):
-            src = stage_nodes[s][i]
-            dst1 = stage_nodes[s + 1][i]
-            dst2 = stage_nodes[s + 1][(i + 1) % width]
-            edges.append(_edge(f"e-bf-{s}-{i}-a", src, dst1))
-            edges.append(_edge(f"e-bf-{s}-{i}-b", src, dst2))
+        for src in stage_nodes[s]:
+            for dst in stage_nodes[s + 1]:
+                edges.append(
+                    _edge(
+                        f"e-bf-{s}-{src}-{dst}",
+                        src,
+                        dst,
+                        source_handle="bottom-out",
+                        target_handle="top-in",
+                    )
+                )
 
     return GeneratedTopology(
         topo_type="butterfly",
@@ -371,9 +521,45 @@ def generate_mesh(rows: int, cols: int, kind: str) -> GeneratedTopology:
         nodes.append(_node(node_id, f"Node {r},{c}", kind, tier=1))
     for r, c in product(range(rows), range(cols)):
         if c + 1 < cols:
-            edges.append(_edge(f"e-{r}-{c}-r", ids[(r, c)], ids[(r, c + 1)]))
+            edges.append(
+                _edge(
+                    f"e-{r}-{c}-r",
+                    ids[(r, c)],
+                    ids[(r, c + 1)],
+                    source_handle="right-out",
+                    target_handle="left-in",
+                )
+            )
+        if c - 1 >= 0:
+            edges.append(
+                _edge(
+                    f"e-{r}-{c}-l",
+                    ids[(r, c)],
+                    ids[(r, c - 1)],
+                    source_handle="left-out",
+                    target_handle="right-in",
+                )
+            )
         if r + 1 < rows:
-            edges.append(_edge(f"e-{r}-{c}-d", ids[(r, c)], ids[(r + 1, c)]))
+            edges.append(
+                _edge(
+                    f"e-{r}-{c}-d",
+                    ids[(r, c)],
+                    ids[(r + 1, c)],
+                    source_handle="bottom-out",
+                    target_handle="top-in",
+                )
+            )
+        if r - 1 >= 0:
+            edges.append(
+                _edge(
+                    f"e-{r}-{c}-u",
+                    ids[(r, c)],
+                    ids[(r - 1, c)],
+                    source_handle="top-out",
+                    target_handle="bottom-in",
+                )
+            )
     return GeneratedTopology(
         topo_type="mesh",
         params={"rows": rows, "cols": cols},
@@ -394,7 +580,7 @@ def generate_ring(count: int, kind: str) -> GeneratedTopology:
     for idx in range(count):
         src = ids[idx]
         dst = ids[(idx + 1) % count]
-        edges.append(_edge(f"e-{src}-{dst}", src, dst))
+        edges.append(_edge(f"e-{src}-{dst}", src, dst, source_handle="right-out", target_handle="left-in"))
     return GeneratedTopology(
         topo_type="ring",
         params={"count": count},
