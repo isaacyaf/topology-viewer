@@ -195,6 +195,18 @@ body {
   flex-wrap: wrap;
 }
 
+.layout-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.layout-toggle input {
+  accent-color: var(--brand);
+}
+
 .file-btn {
   position: relative;
   overflow: hidden;

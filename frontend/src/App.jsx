@@ -4,11 +4,14 @@ import ReactFlow, {
   Background,
   Controls,
   Handle,
+  getNodesBounds,
+  getViewportForBounds,
   MiniMap,
   Position,
   useEdgesState,
   useNodesState
 } from 'reactflow'
+import { toPng } from 'html-to-image'
 import 'reactflow/dist/style.css'
 
 const defaultViewport = { x: 0, y: 0, zoom: 1 }
@@ -123,9 +126,12 @@ export default function App() {
   const [status, setStatus] = useState('idle')
   const [lastSaved, setLastSaved] = useState(null)
   const [activeTab, setActiveTab] = useState('topology')
+  const [layoutEndGap, setLayoutEndGap] = useState(false)
   const statusTimerRef = useRef(null)
   const historyRef = useRef({ past: [], future: [] })
   const suppressHistoryRef = useRef(false)
+  const reactFlowInstanceRef = useRef(null)
+  const reactFlowWrapperRef = useRef(null)
 
   const selectedType = selected?.type
   const selectedId = selected?.id
@@ -149,68 +155,70 @@ export default function App() {
   }, [])
 
 
-  const computeLayoutNodes = useCallback((inputNodes, inputEdges, typeValue, paramsValue) => {
-    const topoTypeValue = typeValue || topoType
-    const topoParamsValue = paramsValue || topoParams
-    if (topoTypeValue === 'torus-2d' || topoTypeValue === 'mesh') {
-      const rows = topoParamsValue.rows || 3
-      const cols = topoParamsValue.cols || 3
-      const spacingX = topoParamsValue.nodeSpacingX || 180
-      const spacingY = topoParamsValue.layerGap || 140
-      return inputNodes.map((node) => {
-        const match = node.id.match(/^n-(\d+)-(\d+)$/)
-        const r = match ? Number(match[1]) : 0
-        const c = match ? Number(match[2]) : 0
-        return {
-          ...node,
-          position: { x: 140 + c * spacingX, y: 120 + r * spacingY }
-        }
-      })
-    }
-    if (topoTypeValue === 'torus-3d') {
-      const xCount = topoParamsValue.x || 3
-      const yCount = topoParamsValue.y || 3
-      const zCount = topoParamsValue.z || 3
-      const spacingX = topoParamsValue.nodeSpacingX || 160
-      const spacingY = topoParamsValue.layerGap || 120
-      const layerGap = topoParamsValue.layerGap3d || 260
-      return inputNodes.map((node) => {
-        const match = node.id.match(/^n-(\d+)-(\d+)-(\d+)$/)
-        const i = match ? Number(match[1]) : 0
-        const j = match ? Number(match[2]) : 0
-        const k = match ? Number(match[3]) : 0
-        const layerX = (k % zCount) * layerGap
-        return {
-          ...node,
-          position: { x: 140 + layerX + i * spacingX, y: 120 + j * spacingY }
-        }
-      })
-    }
-    if (topoTypeValue === 'dragonfly') {
-      const groups = topoParamsValue.groups || 3
-      const routersPerGroup = topoParamsValue.routers_per_group || 4
-      const groupCols = Math.ceil(Math.sqrt(groups))
-      const groupSpacingX = topoParamsValue.groupGapX || 320
-      const groupSpacingY = topoParamsValue.layerGap || 260
-      const nodeSpacingX = topoParamsValue.nodeSpacingX || 120
-      const nodeSpacingY = topoParamsValue.nodeSpacingY || 90
-      return inputNodes.map((node) => {
-        const match = node.id.match(/^g(\d+)-r(\d+)$/)
-        const g = match ? Number(match[1]) - 1 : 0
-        const r = match ? Number(match[2]) - 1 : 0
-        const groupRow = Math.floor(g / groupCols)
-        const groupCol = g % groupCols
-        const localCol = r % Math.ceil(Math.sqrt(routersPerGroup))
-        const localRow = Math.floor(r / Math.ceil(Math.sqrt(routersPerGroup)))
-        return {
-          ...node,
-          position: {
-            x: 140 + groupCol * groupSpacingX + localCol * nodeSpacingX,
-            y: 120 + groupRow * groupSpacingY + localRow * nodeSpacingY
+  const computeLayoutNodes = useCallback(
+    (inputNodes, inputEdges, typeValue, paramsValue, layoutOptions = {}) => {
+      const endGap = Boolean(layoutOptions?.endGap)
+      const topoTypeValue = typeValue || topoType
+      const topoParamsValue = paramsValue || topoParams
+      if (topoTypeValue === 'torus-2d' || topoTypeValue === 'mesh') {
+        const rows = topoParamsValue.rows || 3
+        const cols = topoParamsValue.cols || 3
+        const spacingX = topoParamsValue.nodeSpacingX || 180
+        const spacingY = topoParamsValue.layerGap || 140
+        return inputNodes.map((node) => {
+          const match = node.id.match(/^n-(\d+)-(\d+)$/)
+          const r = match ? Number(match[1]) : 0
+          const c = match ? Number(match[2]) : 0
+          return {
+            ...node,
+            position: { x: 140 + c * spacingX, y: 120 + r * spacingY }
           }
-        }
-      })
-    }
+        })
+      }
+      if (topoTypeValue === 'torus-3d') {
+        const xCount = topoParamsValue.x || 3
+        const yCount = topoParamsValue.y || 3
+        const zCount = topoParamsValue.z || 3
+        const spacingX = topoParamsValue.nodeSpacingX || 160
+        const spacingY = topoParamsValue.layerGap || 120
+        const layerGap = topoParamsValue.layerGap3d || 260
+        return inputNodes.map((node) => {
+          const match = node.id.match(/^n-(\d+)-(\d+)-(\d+)$/)
+          const i = match ? Number(match[1]) : 0
+          const j = match ? Number(match[2]) : 0
+          const k = match ? Number(match[3]) : 0
+          const layerX = (k % zCount) * layerGap
+          return {
+            ...node,
+            position: { x: 140 + layerX + i * spacingX, y: 120 + j * spacingY }
+          }
+        })
+      }
+      if (topoTypeValue === 'dragonfly') {
+        const groups = topoParamsValue.groups || 3
+        const routersPerGroup = topoParamsValue.routers_per_group || 4
+        const groupCols = Math.ceil(Math.sqrt(groups))
+        const groupSpacingX = topoParamsValue.groupGapX || 320
+        const groupSpacingY = topoParamsValue.layerGap || 260
+        const nodeSpacingX = topoParamsValue.nodeSpacingX || 120
+        const nodeSpacingY = topoParamsValue.nodeSpacingY || 90
+        return inputNodes.map((node) => {
+          const match = node.id.match(/^g(\d+)-r(\d+)$/)
+          const g = match ? Number(match[1]) - 1 : 0
+          const r = match ? Number(match[2]) - 1 : 0
+          const groupRow = Math.floor(g / groupCols)
+          const groupCol = g % groupCols
+          const localCol = r % Math.ceil(Math.sqrt(routersPerGroup))
+          const localRow = Math.floor(r / Math.ceil(Math.sqrt(routersPerGroup)))
+          return {
+            ...node,
+            position: {
+              x: 140 + groupCol * groupSpacingX + localCol * nodeSpacingX,
+              y: 120 + groupRow * groupSpacingY + localRow * nodeSpacingY
+            }
+          }
+        })
+      }
 
     const tierOf = (node) =>
       node.data?.tier ?? DEFAULT_TIER[node.data?.kind] ?? DEFAULT_TIER.server
@@ -256,7 +264,10 @@ export default function App() {
       })
       const rowIndex = ordered.findIndex((n) => n.id === node.id)
       const offset = (maxInTier - group.length) / 2
-      const x = 140 + Math.max(0, rowIndex + offset) * nodeSpacingX
+      const x =
+        140 +
+        Math.max(0, rowIndex + offset) * nodeSpacingX +
+        (endGap && rowIndex === group.length - 1 ? nodeSpacingX : 0)
       const y = 120 + tierIndex * layerGap
       return {
         ...node,
@@ -266,8 +277,8 @@ export default function App() {
   }, [])
 
   const autoLayout = useCallback(() => {
-    setNodes(computeLayoutNodes(nodes, edges, topoType, topoParams))
-  }, [computeLayoutNodes, edges, nodes, setNodes, topoParams, topoType])
+    setNodes(computeLayoutNodes(nodes, edges, topoType, topoParams, { endGap: layoutEndGap }))
+  }, [computeLayoutNodes, edges, layoutEndGap, nodes, setNodes, topoParams, topoType])
 
   const normalizeEdges = useCallback((inputEdges, topoTypeValue) => {
     if (topoTypeValue && topoTypeValue !== 'custom') {
@@ -503,6 +514,52 @@ export default function App() {
       window.alert('Failed to load JSON. Check console for details.')
     } finally {
       event.target.value = ''
+    }
+  }
+
+  const exportPng = async () => {
+    const instance = reactFlowInstanceRef.current
+    const wrapper = reactFlowWrapperRef.current
+    if (!instance || !wrapper) return
+    const nodes = instance.getNodes()
+    if (!nodes.length) return
+
+    const bounds = getNodesBounds(nodes)
+    const imageWidth = Math.max(400, Math.ceil(bounds.width + 200))
+    const imageHeight = Math.max(300, Math.ceil(bounds.height + 200))
+    const viewport = getViewportForBounds(bounds, imageWidth, imageHeight, 0.1, 2, 0.2)
+    const viewportEl = wrapper.querySelector('.react-flow__viewport')
+    if (!viewportEl) return
+    const prevTransform = viewportEl.style.transform
+    const prevWidth = viewportEl.style.width
+    const prevHeight = viewportEl.style.height
+
+    try {
+      viewportEl.style.transform = `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.zoom})`
+      viewportEl.style.width = `${imageWidth}px`
+      viewportEl.style.height = `${imageHeight}px`
+
+      const dataUrl = await toPng(viewportEl, {
+        width: imageWidth,
+        height: imageHeight,
+        backgroundColor: '#ffffff',
+        style: {
+          width: `${imageWidth}px`,
+          height: `${imageHeight}px`,
+          transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.zoom})`
+        }
+      })
+      const link = document.createElement('a')
+      link.href = dataUrl
+      link.download = `${name || 'topology'}.png`
+      link.click()
+    } catch (err) {
+      console.error(err)
+      window.alert('Failed to export PNG. Check console for details.')
+    } finally {
+      viewportEl.style.transform = prevTransform
+      viewportEl.style.width = prevWidth
+      viewportEl.style.height = prevHeight
     }
   }
 
@@ -807,6 +864,14 @@ export default function App() {
                   Auto Layout
                 </button>
               </div>
+              <label className="layout-toggle">
+                <input
+                  type="checkbox"
+                  checked={layoutEndGap}
+                  onChange={(event) => setLayoutEndGap(event.target.checked)}
+                />
+                <span>End-gap per layer</span>
+              </label>
             </div>
           </div>
           <div className="action-group">
@@ -927,11 +992,12 @@ export default function App() {
           )}
           <div className="panel-divider" />
           <div className="panel-hint">
-            Drag nodes, click to select, drag from handles to connect.
+            Drag nodes, click to select, drag from handles to connect. Hold Shift to lasso select
+            multiple items.
           </div>
         </aside>
 
-        <main className="canvas">
+        <main className="canvas" ref={reactFlowWrapperRef}>
           <ReactFlow
             nodes={nodes}
             edges={edges}
@@ -940,6 +1006,9 @@ export default function App() {
             onConnect={onConnect}
             onSelectionChange={handleSelectionChange}
             nodeTypes={nodeTypes}
+            onInit={(instance) => {
+              reactFlowInstanceRef.current = instance
+            }}
             fitView
             defaultViewport={defaultViewport}
           >
