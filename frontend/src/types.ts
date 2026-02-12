@@ -300,6 +300,11 @@ export interface HistoryState {
 export type Locale = "en" | "zh-TW";
 
 /**
+ * Theme types
+ */
+export type Theme = "light" | "dark";
+
+/**
  * Translation function type
  */
 export type TranslationFunction = (
@@ -346,3 +351,52 @@ export type KindConfigMap = Record<NodeKind, KindConfig>;
  * Default tier assignments
  */
 export type DefaultTierMap = Record<NodeKind, number>;
+
+// ============================================================================
+// Sidebar Types
+// ============================================================================
+
+/**
+ * Sidebar section identifiers
+ */
+export type SidebarSectionId =
+  | "workspace"
+  | "generator"
+  | "addNodes"
+  | "nodesList"
+  | "layout"
+  | "settings";
+
+/**
+ * Sidebar state
+ */
+export interface SidebarState {
+  open: boolean;
+  expandedSections: Set<SidebarSectionId>;
+}
+
+/**
+ * Sidebar section component props
+ */
+export interface SidebarSectionProps {
+  id: SidebarSectionId;
+  title: string;
+  titleZhTW: string;
+  icon: string;
+  badge?: string | number;
+  expanded: boolean;
+  onToggle: () => void;
+  children: React.ReactNode;
+}
+
+/**
+ * Main sidebar component props
+ */
+export interface SidebarProps {
+  open: boolean;
+  onToggle: () => void;
+  locale: Locale;
+  status?: AppStatus;
+  lastSaved?: Date | null;
+  children: React.ReactNode;
+}

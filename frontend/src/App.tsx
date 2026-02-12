@@ -6,6 +6,7 @@ import {
   useRef,
   useState,
 } from "react";
+
 import ReactFlow, {
   addEdge,
   Background,
@@ -21,6 +22,7 @@ import ReactFlow, {
   type ReactFlowInstance,
   type OnSelectionChangeParams,
 } from "reactflow";
+
 import { toPng } from "html-to-image";
 import "reactflow/dist/style.css";
 
@@ -32,6 +34,7 @@ import type {
   Selection,
   HistoryState,
   Locale,
+  Theme,
   TranslationFunction,
   TopologyType,
   TopologyParamsMap,
@@ -44,7 +47,19 @@ import type {
   HandlePosition,
   KindConfigMap,
   DefaultTierMap,
+  SidebarSectionId,
 } from "./types";
+
+// Sidebar components
+import Sidebar from "./components/Sidebar/Sidebar";
+import SidebarSection from "./components/Sidebar/SidebarSection";
+import WorkspaceSection from "./components/Sidebar/WorkspaceSection";
+import GeneratorSection from "./components/Sidebar/GeneratorSection";
+import AddNodesSection from "./components/Sidebar/AddNodesSection";
+import NodesListSection from "./components/Sidebar/NodesListSection";
+import LayoutSection from "./components/Sidebar/LayoutSection";
+import SettingsSection from "./components/Sidebar/SettingsSection";
+import Inspector from "./components/Inspector/Inspector";
 
 const defaultViewport = { x: 0, y: 0, zoom: 1 };
 
@@ -310,6 +325,7 @@ const CustomNodeGrid = memo<CustomNodeProps>(({ data }) => {
 
 export default function App() {
   const [locale, setLocale] = useState<Locale>("en");
+  const [theme, setTheme] = useState<Theme>("light");
   const [topologies, setTopologies] = useState<TopologySummary[]>([]);
   const [activeId, setActiveId] = useState<number | null>(null);
   const [name, setName] = useState<string>("Default");
@@ -325,6 +341,13 @@ export default function App() {
   const [customKind, setCustomKind] = useState<NodeKind>("switch");
   const [customTier, setCustomTier] = useState<number>(2);
   const [customCount, setCustomCount] = useState<number>(1);
+
+  // Sidebar state
+  const [sidebarOpen, setSidebarOpen] = useState<boolean>(true);
+  const [expandedSections, setExpandedSections] = useState<Set<SidebarSectionId>>(
+    new Set(["workspace", "addNodes", "layout"])
+  );
+
   const statusTimerRef = useRef<number | null>(null);
   const historyRef = useRef<HistoryState>({ past: [], future: [] });
   const suppressHistoryRef = useRef<boolean>(false);
@@ -379,6 +402,67 @@ export default function App() {
       })),
     [nodes],
   );
+
+  // Sidebar section toggle
+  const toggleSection = useCallback((sectionId: SidebarSectionId) => {
+    setExpandedSections((prev) => {
+      const next = new Set(prev);
+      if (next.has(sectionId)) {
+        next.delete(sectionId);
+      } else {
+        next.add(sectionId);
+      }
+      return next;
+    });
+  }, []);
+
+  // Load theme from localStorage or detect system preference on mount
+  useEffect(() => {
+    const savedTheme = localStorage.getItem("theme") as Theme | null;
+
+    if (savedTheme === "light" || savedTheme === "dark") {
+      // Use saved theme if available
+      setTheme(savedTheme);
+      document.documentElement.setAttribute("data-theme", savedTheme);
+    } else {
+      // Detect system preference if no saved theme
+      const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+      const systemTheme: Theme = prefersDark ? "dark" : "light";
+      setTheme(systemTheme);
+      document.documentElement.setAttribute("data-theme", systemTheme);
+    }
+  }, []);
+
+  // Apply theme when it changes
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", theme);
+    localStorage.setItem("theme", theme);
+  }, [theme]);
+
+  // Load sidebar state from localStorage
+  useEffect(() => {
+    const savedState = localStorage.getItem("sidebarState");
+    if (savedState) {
+      try {
+        const { open, sections } = JSON.parse(savedState);
+        setSidebarOpen(open);
+        setExpandedSections(new Set(sections));
+      } catch (e) {
+        console.error("Failed to load sidebar state:", e);
+      }
+    }
+  }, []);
+
+  // Save sidebar state to localStorage
+  useEffect(() => {
+    localStorage.setItem(
+      "sidebarState",
+      JSON.stringify({
+        open: sidebarOpen,
+        sections: Array.from(expandedSections),
+      })
+    );
+  }, [sidebarOpen, expandedSections]);
 
   const handleSelectionChange = useCallback((items: OnSelectionChangeParams) => {
     let nextSelection: Selection | null = null;
@@ -852,6 +936,47 @@ export default function App() {
     await loadTopology(id);
   };
 
+  const selectTopologyNullable = async (id: number | null): Promise<void> => {
+    if (id === null) return;
+    await selectTopology(id);
+  };
+
+  const exportJson = (): void => {
+    const payload = {
+      name,
+      topo_type: topoType,
+      topo_params: topoParams,
+      nodes,
+      edges,
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], {
+      type: "application/json",
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${name || "topology"}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const addNodeBatch = (kind: NodeKind, tier: number, count: number): void => {
+    for (let i = 0; i < count; i++) {
+      const id = `${kind}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      const newNode: AppNode = {
+        id,
+        type: "custom-tree",
+        position: { x: 200 + i * 20, y: 200 + i * 20 },
+        data: {
+          label: `${kind.charAt(0).toUpperCase() + kind.slice(1)} ${nodes.length + i + 1}`,
+          kind,
+          tier,
+        },
+      };
+      setNodes((nds) => [...nds, newNode]);
+    }
+  };
+
   const loadFromJson = async (event: React.ChangeEvent<HTMLInputElement>): Promise<void> => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -1196,839 +1321,169 @@ export default function App() {
 
   return (
     <div className="app-shell">
-      <header className="app-header">
-        <div className="brand">
-          <div className="brand-dot" />
-          <div>
-            <div className="brand-title">{t("Data Center Topology")}</div>
-            <div className="brand-sub">{t("Editable graph with autosave")}</div>
-          </div>
-        </div>
-        <div className="tabs">
-          {["topology", "nodes"].map((tab) => (
-            <button
-              key={tab}
-              className={`tab ${activeTab === tab ? "active" : ""}`}
-              onClick={() => setActiveTab(tab as ActiveTab)}
-            >
-              {tab === "topology" ? t("Topology") : t("Nodes")}
-            </button>
-          ))}
-        </div>
-        <div className="header-actions">
-          <div className="action-group">
-            <div className="group-title">{t("Language")}</div>
-            <div className="group-body">
-              <select
-                value={locale}
-                onChange={(e) => setLocale(e.target.value as Locale)}
-              >
-                <option value="en">{t("English")}</option>
-                <option value="zh-TW">{t("繁體中文")}</option>
-              </select>
-            </div>
-          </div>
-          <div className="action-group">
-            <div className="group-title">{t("Workspace")}</div>
-            <div className="group-body">
-              <div className="topology-select">
-                <span>{t("Topology")}</span>
-                <select
-                  value={activeId || ""}
-                  onChange={(e) => selectTopology(Number(e.target.value))}
-                >
-                  {topologies.map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {item.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <button className="btn ghost" onClick={createTopology}>
-                {t("New")}
-              </button>
-              <button className="btn ghost" onClick={saveTopology}>
-                {t("Save")}
-              </button>
-            </div>
-          </div>
-          <div className="action-group">
-            <div className="group-title">{t("Add Components")}</div>
-            <div className="group-body">
-              <div className="node-palette">
-                <button className="btn" onClick={() => addNode("rack")}>
-                  {t("+ Rack")}
-                </button>
-                <button className="btn ghost" onClick={() => addNode("switch")}>
-                  {t("+ Switch")}
-                </button>
-                <button className="btn ghost" onClick={() => addNode("server")}>
-                  {t("+ Server")}
-                </button>
-                <button className="btn ghost" onClick={() => addNode("asic")}>
-                  {t("+ ASIC")}
-                </button>
-                <button className="btn ghost" onClick={() => addNode("patch")}>
-                  {t("+ Patch")}
-                </button>
-              </div>
-            </div>
-          </div>
-          <div className="action-group">
-            <div className="group-title">{t("Layout")}</div>
-            <div className="group-body">
-              <div className="toolbar">
-                <button className="btn ghost" onClick={undo}>
-                  {t("Undo")}
-                </button>
-                <button className="btn ghost" onClick={redo}>
-                  {t("Redo")}
-                </button>
-                <button className="btn ghost" onClick={autoLayout}>
-                  {t("Auto Layout")}
-                </button>
-              </div>
-              <label className="field">
-                <span>{t("Layer Gap")}</span>
-                <input
-                  type="number"
-                  min="60"
-                  value={topoParams.layerGap ?? 220}
-                  onChange={(e) =>
-                    updateParam("layerGap", Number(e.target.value))
-                  }
-                />
-              </label>
-              <label className="layout-toggle">
-                <input
-                  type="checkbox"
-                  checked={layoutEndGap}
-                  onChange={(event) => setLayoutEndGap(event.target.checked)}
-                />
-                <span>{t("End-gap per layer")}</span>
-              </label>
-            </div>
-          </div>
-          <div className="action-group">
-            <div className="group-title">{t("Export")}</div>
-            <div className="group-body">
-              <label className="btn ghost file-btn">
-                {t("Load JSON")}
-                <input
-                  type="file"
-                  accept="application/json"
-                  onChange={loadFromJson}
-                />
-              </label>
-              <button
-                className="btn ghost"
-                onClick={() => {
-                  const payload = {
-                    name,
-                    topo_type: topoType,
-                    topo_params: topoParams,
-                    nodes,
-                    edges,
-                  };
-                  const blob = new Blob([JSON.stringify(payload, null, 2)], {
-                    type: "application/json",
-                  });
-                  const url = URL.createObjectURL(blob);
-                  const link = document.createElement("a");
-                  link.href = url;
-                  link.download = `${name || "topology"}.json`;
-                  link.click();
-                  URL.revokeObjectURL(url);
-                }}
-              >
-                {t("Export JSON")}
-              </button>
-            </div>
-          </div>
-        </div>
-        <div className={`status ${status}`}>
-          <div className="status-dot" />
-          <div className="status-text">
-            {status === "loading" && t("Loading...")}
-            {status === "saving" && t("Saving...")}
-            {status === "ready" && t("Up to date")}
-            {status === "error" && t("Error")}
-          </div>
-          {lastSaved && status !== "loading" && (
-            <div className="status-time">
-              {t("Saved {time}", { time: lastSaved.toLocaleTimeString() })}
-            </div>
-          )}
-        </div>
-      </header>
+      <Sidebar open={sidebarOpen} onToggle={() => setSidebarOpen(!sidebarOpen)} locale={locale} status={status} lastSaved={lastSaved}>
+        <SidebarSection
+          id="workspace"
+          title="Workspace"
+          titleZhTW="工作區"
+          icon="📁"
+          expanded={expandedSections.has("workspace")}
+          onToggle={() => toggleSection("workspace")}
+          locale={locale}
+        >
+          <WorkspaceSection
+            locale={locale}
+            topologies={topologies}
+            activeId={activeId}
+            name={name}
+            onLoadTopology={selectTopologyNullable}
+            onNameChange={setName}
+            onNewTopology={createTopology}
+            onSaveTopology={saveTopology}
+            onDeleteTopology={deleteTopology}
+            onLoadFromJson={loadFromJson}
+            onExportJson={exportJson}
+          />
+        </SidebarSection>
 
-      <div className="content">
-        <aside className="panel">
-          <div className="panel-title">{t("Topology")}</div>
-          <div className="panel-actions">
-            <input
-              className="name-input"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder={t("Topology name")}
-            />
-            <button className="btn ghost" onClick={createTopology}>
-              {t("New")}
-            </button>
-            <button className="btn danger" onClick={deleteTopology}>
-              {t("Delete")}
-            </button>
-          </div>
-          <div className="panel-divider" />
-          <div className="panel-title">{t("Inspector")}</div>
-          {!hasSelection && (
-            <div className="panel-empty">{t("Select a node or edge.")}</div>
-          )}
-          {hasSelection && (
-            <div className="panel-form">
-              <label className="field">
-                <span>{t("Type")}</span>
-                <input value={selectedType} disabled />
-              </label>
-              {selectedType === "node" && (
-                <label className="field">
-                  <span>{t("Kind")}</span>
-                  <select
-                    value={selectionKind}
-                    onChange={(e) => updateKind(e.target.value)}
-                  >
-                    <option value="rack">{t("Rack")}</option>
-                    <option value="switch">{t("Switch")}</option>
-                    <option value="server">{t("Server")}</option>
-                    <option value="asic">{t("ASIC")}</option>
-                    <option value="patch">{t("Patch Panel")}</option>
-                  </select>
-                </label>
-              )}
-              {selectedType === "node" && selectionKind === "patch" && (
-                <label className="field">
-                  <span>{t("Split")}</span>
-                  <input
-                    type="number"
-                    min="2"
-                    max="64"
-                    value={selectionSplit}
-                    onChange={(e) => updateSplit(e.target.value)}
-                  />
-                </label>
-              )}
-              {selectedType === "node" && (
-                <label className="field">
-                  <span>{t("Tier")}</span>
-                  <input
-                    type="number"
-                    min="1"
-                    step="1"
-                    value={selectionTier}
-                    onChange={(e) => updateTier(e.target.value)}
-                  />
-                </label>
-              )}
-              <label className="field">
-                <span>{t("Label")}</span>
-                <input
-                  value={String(selectionLabel)}
-                  onChange={(e) => updateLabel(e.target.value)}
-                  placeholder={t("Label")}
-                />
-              </label>
-              <button className="btn danger" onClick={removeSelection}>
-                {t("Delete")}
-              </button>
-            </div>
-          )}
-          <div className="panel-divider" />
-          <div className="panel-hint">
-            {t(
-              "Drag nodes, click to select, drag from handles to connect. Hold Shift to lasso select multiple items.",
-            )}
-          </div>
-        </aside>
+        <SidebarSection
+          id="generator"
+          title="Generator"
+          titleZhTW="拓撲生成器"
+          icon="🎨"
+          expanded={expandedSections.has("generator")}
+          onToggle={() => toggleSection("generator")}
+          locale={locale}
+        >
+          <GeneratorSection
+            locale={locale}
+            topoType={topoType}
+            topoParams={topoParams}
+            customKind={customKind}
+            customTier={customTier}
+            customCount={customCount}
+            onTopoTypeChange={setTopoType}
+            onParamChange={updateParam}
+            onCustomKindChange={setCustomKind}
+            onCustomTierChange={setCustomTier}
+            onCustomCountChange={setCustomCount}
+            onAddCustomBatch={addCustomBatch}
+            onGenerate={generateTopology}
+          />
+        </SidebarSection>
 
-        <main className="canvas" ref={reactFlowWrapperRef}>
-          <ReactFlow
-            nodes={renderNodes}
+        <SidebarSection
+          id="addNodes"
+          title="Add Nodes"
+          titleZhTW="新增節點"
+          icon="➕"
+          expanded={expandedSections.has("addNodes")}
+          onToggle={() => toggleSection("addNodes")}
+          locale={locale}
+        >
+          <AddNodesSection
+            locale={locale}
+            onAddNode={addNode}
+            onAddCustomNodes={addNodeBatch}
+          />
+        </SidebarSection>
+
+        <SidebarSection
+          id="nodesList"
+          title="Nodes"
+          titleZhTW="節點列表"
+          icon="📋"
+          badge={nodes.length}
+          expanded={expandedSections.has("nodesList")}
+          onToggle={() => toggleSection("nodesList")}
+          locale={locale}
+        >
+          <NodesListSection
+            locale={locale}
+            nodes={nodes}
+            selectedNodeId={selected?.type === "node" ? selected.id : null}
+            onSelectNode={(id) => setSelected({ type: "node", id })}
+          />
+        </SidebarSection>
+
+        <SidebarSection
+          id="layout"
+          title="Layout"
+          titleZhTW="布局控制"
+          icon="📐"
+          expanded={expandedSections.has("layout")}
+          onToggle={() => toggleSection("layout")}
+          locale={locale}
+        >
+          <LayoutSection
+            locale={locale}
+            layerGap={topoParams.layerGap ?? 180}
+            endGap={layoutEndGap}
+            onAutoLayout={autoLayout}
+            onUndo={undo}
+            onRedo={redo}
+            onLayerGapChange={(value) => updateParam("layerGap", value)}
+            onEndGapChange={setLayoutEndGap}
+            canUndo={historyRef.current.past.length > 0}
+            canRedo={historyRef.current.future.length > 0}
+          />
+        </SidebarSection>
+
+        <SidebarSection
+          id="settings"
+          title="Settings"
+          titleZhTW="設定"
+          icon="🔧"
+          expanded={expandedSections.has("settings")}
+          onToggle={() => toggleSection("settings")}
+          locale={locale}
+        >
+          <SettingsSection locale={locale} theme={theme} onLocaleChange={setLocale} onThemeChange={setTheme} />
+        </SidebarSection>
+      </Sidebar>
+
+      <div className="canvas-container">
+        <ReactFlow
+          nodes={renderNodes}
+          edges={edges}
+          onNodesChange={onNodesChange}
+          onEdgesChange={onEdgesChange}
+          onConnect={onConnect}
+          onSelectionChange={handleSelectionChange}
+          nodeTypes={nodeTypes}
+          onInit={(instance) => {
+            reactFlowInstanceRef.current = instance;
+          }}
+          fitView
+          defaultViewport={defaultViewport}
+        >
+          <MiniMap />
+          <Controls />
+          <Background gap={18} size={1} />
+        </ReactFlow>
+
+        {selected && (
+          <Inspector
+            selected={selected}
+            nodes={nodes}
             edges={edges}
-            onNodesChange={onNodesChange}
-            onEdgesChange={onEdgesChange}
-            onConnect={onConnect}
-            onSelectionChange={handleSelectionChange}
-            nodeTypes={nodeTypes}
-            onInit={(instance) => {
-              reactFlowInstanceRef.current = instance;
+            locale={locale}
+            onUpdateNode={(id, updates) => {
+              setNodes((nds) =>
+                nds.map((n) =>
+                  n.id === id ? { ...n, data: { ...n.data, ...updates } } : n
+                )
+              );
             }}
-            fitView
-            defaultViewport={defaultViewport}
-          >
-            <MiniMap />
-            <Controls />
-            <Background gap={18} size={1} />
-          </ReactFlow>
-        </main>
-        <aside className="panel side">
-          {activeTab === "nodes" && (
-            <>
-              <div className="panel-title">{t("Nodes")}</div>
-              <div className="panel-list">
-                {nodes.map((node) => (
-                  <button
-                    key={node.id}
-                    className="panel-item"
-                    onClick={() => setSelected({ type: "node", id: node.id })}
-                  >
-                    <span>{node.data?.label || node.id}</span>
-                    <span className="muted">
-                      {node.data?.kind
-                        ? getKindLabel(node.data.kind)
-                        : node.type}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </>
-          )}
-          {activeTab === "topology" && (
-            <>
-              <div className="panel-title">{t("Topology")}</div>
-              <div className="panel-empty">
-                {t(
-                  "Build the virtual data center, model cabling, and validate full paths.",
-                )}
-              </div>
-              <div className="panel-form">
-                <button className="btn" onClick={autoLayout}>
-                  {t("Auto Layout (High → Low)")}
-                </button>
-                <div className="panel-divider" />
-                <div className="panel-title">{t("Topology Generator")}</div>
-                <label className="field">
-                  <span>{t("Type")}</span>
-                  <select
-                    value={topoType}
-                    onChange={(e) => setTopoType(e.target.value as TopologyType)}
-                  >
-                    <option value="custom">{t("Custom")}</option>
-                    <option value="leaf-spine">{t("Leaf-Spine")}</option>
-                    <option value="fat-tree">{t("Fat-Tree")}</option>
-                    <option value="three-tier">{t("3-Tier")}</option>
-                    <option value="expanded-clos">{t("Expanded Clos")}</option>
-                    <option value="core-and-pod">{t("Core-and-Pod")}</option>
-                    <option value="torus-2d">{t("2D Torus")}</option>
-                    <option value="torus-3d">{t("3D Torus")}</option>
-                    <option value="dragonfly">{t("Dragonfly")}</option>
-                    <option value="butterfly">{t("Butterfly")}</option>
-                    <option value="mesh">{t("Mesh")}</option>
-                    <option value="ring">{t("Ring")}</option>
-                    <option value="star">{t("Star")}</option>
-                  </select>
-                </label>
-                <label className="field">
-                  <span>{t("Edge Label")}</span>
-                  <input
-                    value={topoParams.edge_label ?? "link"}
-                    onChange={(e) => updateParam("edge_label", e.target.value)}
-                    placeholder={t("Edge Label")}
-                  />
-                </label>
-                {topoType === "leaf-spine" && (
-                  <>
-                    <label className="field">
-                      <span>{t("Spines")}</span>
-                      <input
-                        type="number"
-                        min="1"
-                        value={topoParams.spines ?? 2}
-                        onChange={(e) =>
-                          updateParam("spines", Number(e.target.value))
-                        }
-                      />
-                    </label>
-                    <label className="field">
-                      <span>{t("Spine Kind")}</span>
-                      {renderKindSelect(
-                        topoParams.spine_kind ?? "switch",
-                        (value) => updateParam("spine_kind", value),
-                      )}
-                    </label>
-                    <label className="field">
-                      <span>{t("Leaves")}</span>
-                      <input
-                        type="number"
-                        min="1"
-                        value={topoParams.leaves ?? 4}
-                        onChange={(e) =>
-                          updateParam("leaves", Number(e.target.value))
-                        }
-                      />
-                    </label>
-                    <label className="field">
-                      <span>{t("Leaf Kind")}</span>
-                      {renderKindSelect(
-                        topoParams.leaf_kind ?? "switch",
-                        (value) => updateParam("leaf_kind", value),
-                      )}
-                    </label>
-                  </>
-                )}
-                {topoType === "custom" && (
-                  <>
-                    <label className="field">
-                      <span>{t("Kind")}</span>
-                      {renderKindSelect(customKind, (value) =>
-                        setCustomKind(value),
-                      )}
-                    </label>
-                    <label className="field">
-                      <span>{t("Tier")}</span>
-                      <input
-                        type="number"
-                        min="1"
-                        value={customTier}
-                        onChange={(e) => setCustomTier(Number(e.target.value))}
-                      />
-                    </label>
-                    <label className="field">
-                      <span>{t("Count")}</span>
-                      <input
-                        type="number"
-                        min="1"
-                        value={customCount}
-                        onChange={(e) => setCustomCount(Number(e.target.value))}
-                      />
-                    </label>
-                    <button className="btn" onClick={addCustomBatch}>
-                      {t("Add to Topology")}
-                    </button>
-                  </>
-                )}
-                {topoType === "fat-tree" && (
-                  <>
-                    <label className="field">
-                      <span>{t("k (even)")}</span>
-                      <input
-                        type="number"
-                        min="2"
-                        step="2"
-                        value={topoParams.k ?? 4}
-                        onChange={(e) =>
-                          updateParam("k", Number(e.target.value))
-                        }
-                      />
-                    </label>
-                    <label className="field">
-                      <span>{t("Core Kind")}</span>
-                      {renderKindSelect(
-                        topoParams.core_kind ?? "switch",
-                        (value) => updateParam("core_kind", value),
-                      )}
-                    </label>
-                    <label className="field">
-                      <span>{t("Agg Kind")}</span>
-                      {renderKindSelect(
-                        topoParams.agg_kind ?? "switch",
-                        (value) => updateParam("agg_kind", value),
-                      )}
-                    </label>
-                    <label className="field">
-                      <span>{t("Edge Kind")}</span>
-                      {renderKindSelect(
-                        topoParams.edge_kind ?? "switch",
-                        (value) => updateParam("edge_kind", value),
-                      )}
-                    </label>
-                  </>
-                )}
-                {topoType === "three-tier" && (
-                  <>
-                    <label className="field">
-                      <span>{t("Core")}</span>
-                      <input
-                        type="number"
-                        min="1"
-                        value={topoParams.core ?? 2}
-                        onChange={(e) =>
-                          updateParam("core", Number(e.target.value))
-                        }
-                      />
-                    </label>
-                    <label className="field">
-                      <span>{t("Core Kind")}</span>
-                      {renderKindSelect(
-                        topoParams.core_kind ?? "switch",
-                        (value) => updateParam("core_kind", value),
-                      )}
-                    </label>
-                    <label className="field">
-                      <span>{t("Aggregation")}</span>
-                      <input
-                        type="number"
-                        min="1"
-                        value={topoParams.aggregation ?? 4}
-                        onChange={(e) =>
-                          updateParam("aggregation", Number(e.target.value))
-                        }
-                      />
-                    </label>
-                    <label className="field">
-                      <span>{t("Aggregation Kind")}</span>
-                      {renderKindSelect(
-                        topoParams.agg_kind ?? "switch",
-                        (value) => updateParam("agg_kind", value),
-                      )}
-                    </label>
-                    <label className="field">
-                      <span>{t("Access")}</span>
-                      <input
-                        type="number"
-                        min="1"
-                        value={topoParams.access ?? 6}
-                        onChange={(e) =>
-                          updateParam("access", Number(e.target.value))
-                        }
-                      />
-                    </label>
-                    <label className="field">
-                      <span>{t("Access Kind")}</span>
-                      {renderKindSelect(
-                        topoParams.access_kind ?? "switch",
-                        (value) => updateParam("access_kind", value),
-                      )}
-                    </label>
-                  </>
-                )}
-                {topoType === "expanded-clos" && (
-                  <>
-                    <label className="field">
-                      <span>{t("Tiers")}</span>
-                      <input
-                        type="number"
-                        min="2"
-                        value={topoParams.tiers ?? 4}
-                        onChange={(e) =>
-                          updateParam("tiers", Number(e.target.value))
-                        }
-                      />
-                    </label>
-                    <label className="field">
-                      <span>{t("Nodes / Tier")}</span>
-                      <input
-                        type="number"
-                        min="1"
-                        value={topoParams.nodes_per_tier ?? 4}
-                        onChange={(e) =>
-                          updateParam("nodes_per_tier", Number(e.target.value))
-                        }
-                      />
-                    </label>
-                    <label className="field">
-                      <span>{t("Kind")}</span>
-                      {renderKindSelect(topoParams.kind ?? "switch", (value) =>
-                        updateParam("kind", value),
-                      )}
-                    </label>
-                  </>
-                )}
-                {topoType === "core-and-pod" && (
-                  <>
-                    <label className="field">
-                      <span>{t("Cores")}</span>
-                      <input
-                        type="number"
-                        min="1"
-                        value={topoParams.cores ?? 2}
-                        onChange={(e) =>
-                          updateParam("cores", Number(e.target.value))
-                        }
-                      />
-                    </label>
-                    <label className="field">
-                      <span>{t("Core Kind")}</span>
-                      {renderKindSelect(
-                        topoParams.core_kind ?? "switch",
-                        (value) => updateParam("core_kind", value),
-                      )}
-                    </label>
-                    <label className="field">
-                      <span>{t("Pods")}</span>
-                      <input
-                        type="number"
-                        min="1"
-                        value={topoParams.pods ?? 2}
-                        onChange={(e) =>
-                          updateParam("pods", Number(e.target.value))
-                        }
-                      />
-                    </label>
-                    <label className="field">
-                      <span>{t("Pod Leaves")}</span>
-                      <input
-                        type="number"
-                        min="1"
-                        value={topoParams.pod_leaves ?? 4}
-                        onChange={(e) =>
-                          updateParam("pod_leaves", Number(e.target.value))
-                        }
-                      />
-                    </label>
-                    <label className="field">
-                      <span>{t("Pod Leaf Kind")}</span>
-                      {renderKindSelect(
-                        topoParams.leaf_kind ?? "switch",
-                        (value) => updateParam("leaf_kind", value),
-                      )}
-                    </label>
-                    <label className="field">
-                      <span>{t("Pod Aggs")}</span>
-                      <input
-                        type="number"
-                        min="1"
-                        value={topoParams.pod_aggs ?? 2}
-                        onChange={(e) =>
-                          updateParam("pod_aggs", Number(e.target.value))
-                        }
-                      />
-                    </label>
-                    <label className="field">
-                      <span>{t("Pod Agg Kind")}</span>
-                      {renderKindSelect(
-                        topoParams.agg_kind ?? "switch",
-                        (value) => updateParam("agg_kind", value),
-                      )}
-                    </label>
-                  </>
-                )}
-                {topoType === "torus-2d" && (
-                  <>
-                    <label className="field">
-                      <span>{t("Rows")}</span>
-                      <input
-                        type="number"
-                        min="2"
-                        value={topoParams.rows ?? 3}
-                        onChange={(e) =>
-                          updateParam("rows", Number(e.target.value))
-                        }
-                      />
-                    </label>
-                    <label className="field">
-                      <span>{t("Cols")}</span>
-                      <input
-                        type="number"
-                        min="2"
-                        value={topoParams.cols ?? 3}
-                        onChange={(e) =>
-                          updateParam("cols", Number(e.target.value))
-                        }
-                      />
-                    </label>
-                    <label className="field">
-                      <span>{t("Kind")}</span>
-                      {renderKindSelect(topoParams.kind ?? "switch", (value) =>
-                        updateParam("kind", value),
-                      )}
-                    </label>
-                  </>
-                )}
-                {topoType === "torus-3d" && (
-                  <>
-                    <label className="field">
-                      <span>{t("X")}</span>
-                      <input
-                        type="number"
-                        min="2"
-                        value={topoParams.x ?? 3}
-                        onChange={(e) =>
-                          updateParam("x", Number(e.target.value))
-                        }
-                      />
-                    </label>
-                    <label className="field">
-                      <span>{t("Y")}</span>
-                      <input
-                        type="number"
-                        min="2"
-                        value={topoParams.y ?? 3}
-                        onChange={(e) =>
-                          updateParam("y", Number(e.target.value))
-                        }
-                      />
-                    </label>
-                    <label className="field">
-                      <span>{t("Z")}</span>
-                      <input
-                        type="number"
-                        min="2"
-                        value={topoParams.z ?? 3}
-                        onChange={(e) =>
-                          updateParam("z", Number(e.target.value))
-                        }
-                      />
-                    </label>
-                    <label className="field">
-                      <span>{t("Kind")}</span>
-                      {renderKindSelect(topoParams.kind ?? "switch", (value) =>
-                        updateParam("kind", value),
-                      )}
-                    </label>
-                  </>
-                )}
-                {topoType === "dragonfly" && (
-                  <>
-                    <label className="field">
-                      <span>{t("Groups")}</span>
-                      <input
-                        type="number"
-                        min="2"
-                        value={topoParams.groups ?? 3}
-                        onChange={(e) =>
-                          updateParam("groups", Number(e.target.value))
-                        }
-                      />
-                    </label>
-                    <label className="field">
-                      <span>{t("Routers / Group")}</span>
-                      <input
-                        type="number"
-                        min="2"
-                        value={topoParams.routers_per_group ?? 4}
-                        onChange={(e) =>
-                          updateParam(
-                            "routers_per_group",
-                            Number(e.target.value),
-                          )
-                        }
-                      />
-                    </label>
-                    <label className="field">
-                      <span>{t("Kind")}</span>
-                      {renderKindSelect(topoParams.kind ?? "switch", (value) =>
-                        updateParam("kind", value),
-                      )}
-                    </label>
-                  </>
-                )}
-                {topoType === "butterfly" && (
-                  <>
-                    <label className="field">
-                      <span>{t("Stages")}</span>
-                      <input
-                        type="number"
-                        min="2"
-                        value={topoParams.stages ?? 4}
-                        onChange={(e) =>
-                          updateParam("stages", Number(e.target.value))
-                        }
-                      />
-                    </label>
-                    <label className="field">
-                      <span>{t("Width")}</span>
-                      <input
-                        type="number"
-                        min="2"
-                        value={topoParams.width ?? 4}
-                        onChange={(e) =>
-                          updateParam("width", Number(e.target.value))
-                        }
-                      />
-                    </label>
-                    <label className="field">
-                      <span>{t("Kind")}</span>
-                      {renderKindSelect(topoParams.kind ?? "switch", (value) =>
-                        updateParam("kind", value),
-                      )}
-                    </label>
-                  </>
-                )}
-                {topoType === "mesh" && (
-                  <>
-                    <label className="field">
-                      <span>{t("Rows")}</span>
-                      <input
-                        type="number"
-                        min="2"
-                        value={topoParams.rows ?? 3}
-                        onChange={(e) =>
-                          updateParam("rows", Number(e.target.value))
-                        }
-                      />
-                    </label>
-                    <label className="field">
-                      <span>{t("Cols")}</span>
-                      <input
-                        type="number"
-                        min="2"
-                        value={topoParams.cols ?? 3}
-                        onChange={(e) =>
-                          updateParam("cols", Number(e.target.value))
-                        }
-                      />
-                    </label>
-                    <label className="field">
-                      <span>{t("Kind")}</span>
-                      {renderKindSelect(topoParams.kind ?? "switch", (value) =>
-                        updateParam("kind", value),
-                      )}
-                    </label>
-                  </>
-                )}
-                {topoType === "ring" && (
-                  <>
-                    <label className="field">
-                      <span>{t("Count")}</span>
-                      <input
-                        type="number"
-                        min="3"
-                        value={topoParams.count ?? 6}
-                        onChange={(e) =>
-                          updateParam("count", Number(e.target.value))
-                        }
-                      />
-                    </label>
-                    <label className="field">
-                      <span>{t("Kind")}</span>
-                      {renderKindSelect(topoParams.kind ?? "switch", (value) =>
-                        updateParam("kind", value),
-                      )}
-                    </label>
-                  </>
-                )}
-                {topoType === "star" && (
-                  <>
-                    <label className="field">
-                      <span>{t("Count")}</span>
-                      <input
-                        type="number"
-                        min="3"
-                        value={topoParams.count ?? 6}
-                        onChange={(e) =>
-                          updateParam("count", Number(e.target.value))
-                        }
-                      />
-                    </label>
-                    <label className="field">
-                      <span>{t("Kind")}</span>
-                      {renderKindSelect(topoParams.kind ?? "switch", (value) =>
-                        updateParam("kind", value),
-                      )}
-                    </label>
-                  </>
-                )}
-                <button
-                  className="btn"
-                  onClick={generateTopology}
-                  disabled={topoType === "custom"}
-                >
-                  {t("Generate")}
-                </button>
-              </div>
-            </>
-          )}
-        </aside>
+            onUpdateEdge={(id, updates) => {
+              setEdges((eds) =>
+                eds.map((e) => (e.id === id ? { ...e, ...updates } : e))
+              );
+            }}
+            onDelete={removeSelection}
+            onClose={() => setSelected(null)}
+          />
+        )}
       </div>
     </div>
   );
