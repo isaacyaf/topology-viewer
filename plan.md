@@ -1,93 +1,144 @@
-# Topology Scope Plan
+# Topology Viewer PLAN
 
-## Goal
+## 1) Goal
 
-Focus on tree / CLOS-style topologies that are common in data center networks, and define optional add-ons that are useful for visualization but not required for the first release.
+On top of the existing editable topology capabilities, complete three areas: rule validation, export consistency, and quality assurance, so the project is stable for demos and maintainable long-term.
 
-## Scope Summary
-
-### Tier 1 (must-have)
-
-1. Leaf-Spine (2-tier folded Clos)
-   - Standard DC fabric; leaves connect to spines.
-2. Fat-Tree (k-ary, 3-tier folded Clos)
-   - Pods with edge + aggregation; core on top.
-3. 3-Tier Tree (Core / Aggregation / Access)
-   - Traditional enterprise DC hierarchy.
-
-### Tier 2 (optional, aligned with CLOS)
-
-4. Expanded Clos (multi-stage)
-   - More than 3 tiers for larger fabrics.
-5. Core-and-Pod (core + repeated pods)
-   - Growth model; pods repeated under a core.
-
-### Tier 3 (reference-only)
-
-6. Torus (2D/3D grid with wrap-around)
-7. Dragonfly
-8. Butterfly (multi-stage)
-9. Mesh / Ring / Star (generic network families)
-
-## Notes from Topology Literature
-
-- Fat-tree is a folded Clos topology with three layers (edge/aggregation/core) and k pods; each pod has k switches split between edge and aggregation. k is even.
-- Leaf-Spine naming aligns with the fat-tree levels (leaf at bottom, spine/aggregation in the middle, core/ToF on top).
-- 3-tier DC architecture is the classic core/aggregation/access hierarchy.
-- Torus is a mesh with wrap-around links (2D or 3D), useful as a reference topology but not a CLOS variant.
-- Dragonfly and Butterfly are HPC-style topologies; include as reference-only unless explicitly requested.
-
-## Implementation Plan
-
-### Phase 1: Data Model
-
-- Node attributes: type, tier (numeric), role (leaf/spine/core/agg/access), pod id (optional).
-- Edge attributes: type (uplink/downlink), capacity label.
-
-### Phase 2: Layout Engine
-
-- Top-down tiered layout (numeric tier descending).
-- Leaf-Spine rule: connect each leaf to all spines.
-- Fat-Tree rule: generate pods (edge+aggregation), connect to core.
-- 3-Tier rule: connect access->aggregation->core with fanout.
-- Expanded Clos: allow N tiers with per-tier fanout.
-
-### Phase 3: UI Controls
-
-- Topology selector: Leaf-Spine, Fat-Tree, 3-Tier, Expanded Clos.
-- Parameters per topology:
-  - Leaf-Spine: #spines, #leaves, oversubscription.
-  - Fat-Tree: k (even), pods, servers per edge.
-  - 3-Tier: #core, #agg, #access, fanout.
-  - Expanded Clos: tier count, nodes per tier, fanout.
-
-### Phase 4: Validation/Export
-
-- Validate required connections based on topology rules.
-- Export JSON with topology type + parameters + nodes/edges.
-
-## Acceptance Criteria
-
-- Users can generate Leaf-Spine and Fat-Tree layouts with one click.
-- Layouts are top-down (higher tier above lower tier).
-- Nodes align left-to-right within a tier.
-- Export includes topology metadata.
-
-## Progress Tracking
+## 2) Current Status
 
 ### Completed
 
-- Tier 1 generators implemented: Leaf-Spine, Fat-Tree, 3-Tier
-- Topology metadata storage (topo_type, topo_params)
-- Generator API endpoint
-- Frontend generator UI with parameter inputs
-- Tiered auto layout (numeric tiers, top-down)
-- Tier 2 generators implemented: Expanded Clos, Core-and-Pod
-- Tier 3 generators implemented: 2D/3D Torus, Dragonfly, Butterfly, Mesh/Ring/Star
+- Topology CRUD (frontend + backend)
+- Autosave and manual save
+- Tiered auto layout (top-down)
+- Tier 1 generators: Leaf-Spine, Fat-Tree, 3-Tier
+- Tier 2 generators: Expanded Clos, Core-and-Pod
+- Tier 3 reference topologies: Torus, Dragonfly, Butterfly, Mesh/Ring/Star
+- Topology metadata persistence (`topo_type`, `topo_params`)
 
-### In Progress / Pending
+### High-Priority Gaps
 
-- Validation rules per topology (e.g., fat-tree k even)
-- Export metadata (type + params) validation/consistency checks
+- Validation for topology parameters and connection rules
+- Export consistency and completeness checks
+- Basic automated tests (API + generator core rules)
 
-### Not Started
+## 3) Execution Priority
+
+1. Rule validation (prevent invalid data from entering the system)
+2. Export consistency (ensure outputs are reliably consumable by other tools)
+3. Automated testing (prevent regressions)
+4. Documentation and demo flow improvements (reduce handover cost)
+5. Operational readiness (security, observability, CI/CD)
+
+## 4) Phased Plan
+
+### Phase A: Rule Validation (1-2 days)
+
+- Backend: Add topology-specific validation in generate/update flows
+- Frontend: Add real-time parameter validation and error messages
+- Minimum acceptance:
+  - Fat-Tree `k` must be even
+  - Count/tier/fanout parameters must meet reasonable lower bounds
+  - Invalid parameters are blocked with clear error feedback
+
+### Phase B: Export Consistency (1 day)
+
+- Define export schema (required fields for type, params, nodes, edges)
+- Add pre-export normalization (ID, tier, role, edge type)
+- Minimum acceptance:
+  - Exported JSON always includes `topo_type` and `topo_params`
+  - Repeated exports of the same topology have consistent structure
+
+### Phase C: Testing and Regression (1-2 days)
+
+- Backend unit tests: generators and validators
+- API tests: basic flows for `/api/topologies` and `/generate`
+- Minimum acceptance:
+  - Each core generator has at least 1 valid case + 1 invalid case
+  - Key API happy paths pass
+
+### Phase D: Documentation and Release Readiness (0.5-1 day)
+
+- Update README: feature matrix, limitations, known issues
+- Create demo checklist (create, generate, edit, save, export)
+- Minimum acceptance:
+  - A new team member can run local setup and complete the demo in 15 minutes
+
+### Phase E: Operational Readiness (1-2 days)
+
+- Security baseline:
+  - Add request size limits and basic payload validation hardening
+  - Restrict CORS origins by environment (dev vs prod)
+- Observability baseline:
+  - Structured backend logging (request id, status code, latency)
+  - Error boundaries and user-facing error states in frontend
+- CI baseline:
+  - Add CI pipeline for lint + tests on pull requests
+- Minimum acceptance:
+  - CI runs automatically for PRs and blocks merge on failures
+  - Key API errors are visible in logs with enough debugging context
+
+### Phase F: Product Usability Improvements (1-2 days)
+
+- Topology editing UX:
+  - Multi-select and bulk actions (delete, tier update)
+  - Safer destructive actions (confirmation + undo consistency)
+- Data portability:
+  - Add import JSON to complement export flow
+  - Validate imported schema with actionable error messages
+- Internationalization readiness:
+  - Move all user-facing strings into locale resources
+  - Add language fallback behavior for missing keys
+- Minimum acceptance:
+  - Users can import an exported topology without manual fixes
+  - Major actions (delete/import/generate) provide clear success/error feedback
+
+## 5) Milestones
+
+1. M1: Validation Ready
+   - Complete Phase A, with baseline parameter validation for all core topologies
+2. M2: Export Stable
+   - Complete Phase B, with stable and reproducible export fields
+3. M3: QA Baseline
+   - Complete Phase C, establishing a minimum automated test safety net
+4. M4: Demo Ready
+   - Complete Phase D, ready for stable external demos
+5. M5: Ops Ready
+   - Complete Phase E, with CI, logging, and security baseline
+6. M6: Usability Upgrade
+   - Complete Phase F, with import flow and key UX improvements
+
+## 6) Risks and Mitigations
+
+- Risk: Large differences across topology rules can fragment validation logic
+  - Mitigation: Use a single validator entry point, dispatch by topology type
+- Risk: Frontend/backend may interpret parameters differently
+  - Mitigation: Define one schema as source of truth and share field definitions
+- Risk: New topology additions may break existing behavior
+  - Mitigation: Keep a minimum regression test per topology
+- Risk: Growing feature set can increase UI complexity and user confusion
+  - Mitigation: Define UX patterns for primary actions and keep interaction rules consistent
+- Risk: Missing CI enforcement can allow regressions into main branch
+  - Mitigation: Require PR checks (lint/tests) before merge
+
+## 7) Definition of Done
+
+- Users can reliably generate core DC topologies and receive clear validation feedback
+- Export content is complete and consistent
+- Key flows are covered by repeatable automated tests
+- README and demo flow support handoff and external presentation
+- CI, logging, and baseline security controls are in place
+- Import/export round-trip works for supported topology types
+
+## 8) Added Backlog Items (New)
+
+1. API versioning and compatibility policy
+   - Define `/api/v1` path strategy and deprecation rules for future changes.
+2. Database migration workflow
+   - Add migration tooling/process so schema changes are trackable and reversible.
+3. Performance targets for large topologies
+   - Set target limits (for example, node/edge counts) and verify load/edit/render performance.
+4. Access control model (if external users are expected)
+   - Plan authentication/authorization boundaries before multi-user deployment.
+5. Release management
+   - Tagging/changelog template and release checklist for repeatable delivery.

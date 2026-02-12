@@ -1363,8 +1363,15 @@ export default function App() {
             locale={locale}
             topoType={topoType}
             topoParams={topoParams}
+            customKind={customKind}
+            customTier={customTier}
+            customCount={customCount}
             onTopoTypeChange={setTopoType}
             onParamChange={updateParam}
+            onCustomKindChange={setCustomKind}
+            onCustomTierChange={setCustomTier}
+            onCustomCountChange={setCustomCount}
+            onAddCustomBatch={addCustomBatch}
             onGenerate={generateTopology}
           />
         </SidebarSection>

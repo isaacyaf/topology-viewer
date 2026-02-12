@@ -4,8 +4,15 @@ interface GeneratorSectionProps {
   locale: Locale;
   topoType: TopologyType;
   topoParams: TopologyParamsMap;
+  customKind: NodeKind;
+  customTier: number;
+  customCount: number;
   onTopoTypeChange: (type: TopologyType) => void;
   onParamChange: (key: string, value: string | number) => void;
+  onCustomKindChange: (value: NodeKind) => void;
+  onCustomTierChange: (value: number) => void;
+  onCustomCountChange: (value: number) => void;
+  onAddCustomBatch: () => void;
   onGenerate: () => void;
 }
 
@@ -13,8 +20,15 @@ export default function GeneratorSection({
   locale,
   topoType,
   topoParams,
+  customKind,
+  customTier,
+  customCount,
   onTopoTypeChange,
   onParamChange,
+  onCustomKindChange,
+  onCustomTierChange,
+  onCustomCountChange,
+  onAddCustomBatch,
   onGenerate,
 }: GeneratorSectionProps) {
   const t = (en: string, zhTW: string) => (locale === "zh-TW" ? zhTW : en);
@@ -283,9 +297,37 @@ export default function GeneratorSection({
       </button>
 
       {topoType === "custom" && (
-        <div style={{ fontSize: "0.75rem", color: "#94a3b8", textAlign: "center" }}>
-          {t("Custom mode: Add nodes manually", "自訂模式：手動新增節點")}
-        </div>
+        <>
+          <div className="field">
+            <label>{t("Node Kind", "節點種類")}</label>
+            {renderKindSelect(customKind, onCustomKindChange)}
+          </div>
+          <div className="field">
+            <label>{t("Tier", "層級")}</label>
+            <input
+              type="number"
+              min="1"
+              value={customTier}
+              onChange={(e) => onCustomTierChange(Math.max(1, Number(e.target.value) || 1))}
+            />
+          </div>
+          <div className="field">
+            <label>{t("Count", "數量")}</label>
+            <input
+              type="number"
+              min="1"
+              max="200"
+              value={customCount}
+              onChange={(e) => onCustomCountChange(Math.max(1, Number(e.target.value) || 1))}
+            />
+          </div>
+          <button className="btn" onClick={onAddCustomBatch}>
+            {t("Add Custom Nodes", "新增自訂節點")}
+          </button>
+          <div style={{ fontSize: "0.75rem", color: "#94a3b8", textAlign: "center" }}>
+            {t("Custom mode: Fill kind/tier and add nodes", "自訂模式：設定種類/層級後新增節點")}
+          </div>
+        </>
       )}
     </div>
   );
