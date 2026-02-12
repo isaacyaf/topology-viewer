@@ -1,4 +1,4 @@
-import React, {
+import {
   memo,
   useCallback,
   useEffect,
@@ -17,13 +17,38 @@ import ReactFlow, {
   Position,
   useEdgesState,
   useNodesState,
+  type Connection,
+  type ReactFlowInstance,
+  type OnSelectionChangeParams,
 } from "reactflow";
 import { toPng } from "html-to-image";
 import "reactflow/dist/style.css";
 
+import type {
+  AppNode,
+  AppEdge,
+  AppStatus,
+  ActiveTab,
+  Selection,
+  HistoryState,
+  Locale,
+  TranslationFunction,
+  TopologyType,
+  TopologyParamsMap,
+  TopologySummary,
+  TopologyResponse,
+  CustomNodeProps,
+  CustomNodeData,
+  LayoutOptions,
+  NodeKind,
+  HandlePosition,
+  KindConfigMap,
+  DefaultTierMap,
+} from "./types";
+
 const defaultViewport = { x: 0, y: 0, zoom: 1 };
 
-const NON_TREE_TYPES = new Set([
+const NON_TREE_TYPES = new Set<TopologyType>([
   "torus-2d",
   "torus-3d",
   "dragonfly",
@@ -33,7 +58,8 @@ const NON_TREE_TYPES = new Set([
   "star",
 ]);
 
-const TRANSLATIONS = {
+const TRANSLATIONS: Record<Locale, Record<string, string>> = {
+  en: {},
   "zh-TW": {
     "Data Center Topology": "資料中心拓撲",
     "Editable graph with autosave": "可編輯拓撲，含自動儲存",
@@ -142,7 +168,7 @@ const TRANSLATIONS = {
   },
 };
 
-const KIND_CONFIG = {
+const KIND_CONFIG: KindConfigMap = {
   rack: { label: "Rack", color: "#0ea5e9" },
   switch: { label: "Switch", color: "#f59e0b" },
   server: { label: "Server", color: "#10b981" },
@@ -150,7 +176,7 @@ const KIND_CONFIG = {
   patch: { label: "Patch Panel", color: "#0f766e" },
 };
 
-const DEFAULT_TIER = {
+const DEFAULT_TIER: DefaultTierMap = {
   switch: 3,
   rack: 2,
   server: 1,
@@ -217,18 +243,18 @@ const ICONS = {
   patch: PatchIcon,
 };
 
-let currentLocale = "en";
+let currentLocale: Locale = "en";
 
-const setCurrentLocale = (nextLocale) => {
+const setCurrentLocale = (nextLocale: Locale): void => {
   currentLocale = nextLocale;
 };
 
-const getKindLabel = (kind) => {
+const getKindLabel = (kind: NodeKind): string => {
   const base = KIND_CONFIG[kind]?.label || kind;
   return TRANSLATIONS[currentLocale]?.[base] || base;
 };
 
-const CustomNodeTree = memo(({ data }) => {
+const CustomNodeTree = memo<CustomNodeProps>(({ data }) => {
   const config = KIND_CONFIG[data.kind] || KIND_CONFIG.rack;
   const Icon = ICONS[data.kind] || RackIcon;
   const split = data.kind === "patch" ? data.splitCount || 2 : null;
@@ -255,7 +281,7 @@ const CustomNodeTree = memo(({ data }) => {
   );
 });
 
-const CustomNodeGrid = memo(({ data }) => {
+const CustomNodeGrid = memo<CustomNodeProps>(({ data }) => {
   const config = KIND_CONFIG[data.kind] || KIND_CONFIG.rack;
   const Icon = ICONS[data.kind] || RackIcon;
   const split = data.kind === "patch" ? data.splitCount || 2 : null;
@@ -283,31 +309,31 @@ const CustomNodeGrid = memo(({ data }) => {
 });
 
 export default function App() {
-  const [locale, setLocale] = useState("en");
-  const [topologies, setTopologies] = useState([]);
-  const [activeId, setActiveId] = useState(null);
-  const [name, setName] = useState("Default");
-  const [topoType, setTopoType] = useState("custom");
-  const [topoParams, setTopoParams] = useState({});
-  const [nodes, setNodes, onNodesChange] = useNodesState([]);
+  const [locale, setLocale] = useState<Locale>("en");
+  const [topologies, setTopologies] = useState<TopologySummary[]>([]);
+  const [activeId, setActiveId] = useState<number | null>(null);
+  const [name, setName] = useState<string>("Default");
+  const [topoType, setTopoType] = useState<TopologyType>("custom");
+  const [topoParams, setTopoParams] = useState<TopologyParamsMap>({});
+  const [nodes, setNodes, onNodesChange] = useNodesState<CustomNodeData>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
-  const [selected, setSelected] = useState(null);
-  const [status, setStatus] = useState("idle");
-  const [lastSaved, setLastSaved] = useState(null);
-  const [activeTab, setActiveTab] = useState("topology");
-  const [layoutEndGap, setLayoutEndGap] = useState(false);
-  const [customKind, setCustomKind] = useState("switch");
-  const [customTier, setCustomTier] = useState(2);
-  const [customCount, setCustomCount] = useState(1);
-  const statusTimerRef = useRef(null);
-  const historyRef = useRef({ past: [], future: [] });
-  const suppressHistoryRef = useRef(false);
-  const reactFlowInstanceRef = useRef(null);
-  const reactFlowWrapperRef = useRef(null);
-  const nodesRef = useRef([]);
-  const edgesRef = useRef([]);
+  const [selected, setSelected] = useState<Selection | null>(null);
+  const [status, setStatus] = useState<AppStatus>("idle");
+  const [lastSaved, setLastSaved] = useState<Date | null>(null);
+  const [activeTab, setActiveTab] = useState<ActiveTab>("topology");
+  const [layoutEndGap, setLayoutEndGap] = useState<boolean>(false);
+  const [customKind, setCustomKind] = useState<NodeKind>("switch");
+  const [customTier, setCustomTier] = useState<number>(2);
+  const [customCount, setCustomCount] = useState<number>(1);
+  const statusTimerRef = useRef<number | null>(null);
+  const historyRef = useRef<HistoryState>({ past: [], future: [] });
+  const suppressHistoryRef = useRef<boolean>(false);
+  const reactFlowInstanceRef = useRef<ReactFlowInstance | null>(null);
+  const reactFlowWrapperRef = useRef<HTMLDivElement | null>(null);
+  const nodesRef = useRef<AppNode[]>([]);
+  const edgesRef = useRef<AppEdge[]>([]);
 
-  const t = useCallback(
+  const t = useCallback<TranslationFunction>(
     (text, vars) => {
       const table = TRANSLATIONS[locale] || {};
       let out = table[text] ?? text;
@@ -354,12 +380,12 @@ export default function App() {
     [nodes],
   );
 
-  const handleSelectionChange = useCallback((items) => {
-    let nextSelection = null;
+  const handleSelectionChange = useCallback((items: OnSelectionChangeParams) => {
+    let nextSelection: Selection | null = null;
     if (items.nodes?.length) {
-      nextSelection = { type: "node", id: items.nodes[0].id };
+      nextSelection = { type: "node", id: items.nodes[0]!.id };
     } else if (items.edges?.length) {
-      nextSelection = { type: "edge", id: items.edges[0].id };
+      nextSelection = { type: "edge", id: items.edges[0]!.id };
     }
     setSelected((prev) => {
       if (
@@ -373,7 +399,13 @@ export default function App() {
   }, []);
 
   const computeLayoutNodes = useCallback(
-    (inputNodes, inputEdges, typeValue, paramsValue, layoutOptions = {}) => {
+    (
+      inputNodes: AppNode[],
+      inputEdges: AppEdge[],
+      typeValue?: TopologyType,
+      paramsValue?: TopologyParamsMap,
+      layoutOptions: LayoutOptions = {}
+    ): AppNode[] => {
       const endGap = Boolean(layoutOptions?.endGap);
       const topoTypeValue = typeValue || topoType;
       const topoParamsValue = paramsValue || topoParams;
@@ -456,20 +488,20 @@ export default function App() {
         });
       }
 
-      const tierOf = (node) =>
+      const tierOf = (node: AppNode): number =>
         node.data?.tier ?? DEFAULT_TIER[node.data?.kind] ?? DEFAULT_TIER.server;
-      const edgesBySource = inputEdges.reduce((acc, edge) => {
+      const edgesBySource: Record<string, string[]> = inputEdges.reduce((acc, edge) => {
         if (!acc[edge.source]) acc[edge.source] = [];
-        acc[edge.source].push(edge.target);
+        acc[edge.source]!.push(edge.target);
         return acc;
-      }, {});
-      const edgesByTarget = inputEdges.reduce((acc, edge) => {
+      }, {} as Record<string, string[]>);
+      const edgesByTarget: Record<string, string[]> = inputEdges.reduce((acc, edge) => {
         if (!acc[edge.target]) acc[edge.target] = [];
-        acc[edge.target].push(edge.source);
+        acc[edge.target]!.push(edge.source);
         return acc;
-      }, {});
+      }, {} as Record<string, string[]>);
 
-      const scoreNode = (node) => {
+      const scoreNode = (node: AppNode): number => {
         const tier = tierOf(node);
         if (tier >= 3) return 1000;
         if (tier === 2) {
@@ -534,8 +566,8 @@ export default function App() {
     topoType,
   ]);
 
-  const normalizeEdges = useCallback((inputEdges) => {
-    const mapHandle = (value, role) => {
+  const normalizeEdges = useCallback((inputEdges: AppEdge[]): AppEdge[] => {
+    const mapHandle = (value: string | undefined | null, role: "source" | "target"): string => {
       if (!value) return role === "source" ? "bottom-out" : "top-in";
       if (value.endsWith("-out") || value.endsWith("-in")) return value;
       if (["left", "right", "top", "bottom"].includes(value)) {
@@ -546,18 +578,18 @@ export default function App() {
 
     return inputEdges.map((edge) => ({
       ...edge,
-      sourceHandle: mapHandle(edge.sourceHandle, "source"),
-      targetHandle: mapHandle(edge.targetHandle, "target"),
+      sourceHandle: mapHandle(edge.sourceHandle, "source") as HandlePosition,
+      targetHandle: mapHandle(edge.targetHandle, "target") as HandlePosition,
     }));
   }, []);
 
   const loadTopology = useCallback(
-    async (id) => {
+    async (id: number | null): Promise<void> => {
       if (!id) return;
       setStatus("loading");
       try {
         const res = await fetch(`/api/topologies/${id}`);
-        const data = await res.json();
+        const data: TopologyResponse = await res.json();
         setName(data.name || t("Default"));
         setTopoType(data.topo_type || "custom");
         setTopoParams(data.topo_params || {});
@@ -596,14 +628,14 @@ export default function App() {
     [computeLayoutNodes, normalizeEdges, setEdges, setNodes, t],
   );
 
-  const loadTopologies = useCallback(async () => {
+  const loadTopologies = useCallback(async (): Promise<void> => {
     setStatus("loading");
     try {
       const res = await fetch("/api/topologies");
       if (!res.ok) {
         throw new Error(`Failed to load topologies: ${res.status}`);
       }
-      const data = await res.json();
+      const data: TopologySummary[] = await res.json();
       if (!Array.isArray(data)) {
         throw new Error("Invalid topology list payload");
       }
@@ -625,7 +657,7 @@ export default function App() {
     loadTopologies();
   }, [loadTopologies]);
 
-  const saveTopology = useCallback(async () => {
+  const saveTopology = useCallback(async (): Promise<void> => {
     if (!activeId) return;
     if (statusTimerRef.current) {
       clearTimeout(statusTimerRef.current);
@@ -650,7 +682,7 @@ export default function App() {
         setStatus("ready");
         setLastSaved(savedAt);
         statusTimerRef.current = null;
-      }, 1200);
+      }, 1200) as unknown as number;
       setTopologies((items) =>
         items.map((item) => (item.id === activeId ? { ...item, name } : item)),
       );
@@ -669,20 +701,21 @@ export default function App() {
   }, [name, nodes, edges, saveTopology, status]);
 
   const onConnect = useCallback(
-    (params) => setEdges((eds) => addEdge({ ...params, label: "link" }, eds)),
+    (params: Connection) => setEdges((eds) => addEdge({ ...params, label: "link" }, eds)),
     [setEdges],
   );
 
-  const addNode = (kind = "rack") => {
+  const addNode = (kind: NodeKind = "rack"): void => {
     const id = `node-${Date.now()}`;
     const config = KIND_CONFIG[kind] || KIND_CONFIG.rack;
-    const next = {
+    const next: AppNode = {
       id,
       type: "custom",
       position: { x: 100 + nodes.length * 40, y: 100 + nodes.length * 30 },
       data: {
         label: `${config.label} ${nodes.length + 1}`,
         kind,
+        tier: DEFAULT_TIER[kind],
         splitCount: kind === "patch" ? 8 : undefined,
         layout: "tree",
       },
@@ -690,7 +723,7 @@ export default function App() {
     setNodes((nds) => nds.concat(next));
   };
 
-  const addCustomBatch = () => {
+  const addCustomBatch = (): void => {
     const count = Math.max(1, Number(customCount) || 1);
     const tier = Math.max(1, Number(customTier) || 1);
     const kind = customKind || "switch";
@@ -699,7 +732,7 @@ export default function App() {
       (node) => node.data?.kind === kind,
     ).length;
     const stamp = Date.now();
-    const nextNodes = [];
+    const nextNodes: AppNode[] = [];
     for (let i = 0; i < count; i += 1) {
       const id = `node-${stamp}-${i}`;
       nextNodes.push({
@@ -730,7 +763,7 @@ export default function App() {
       (node) => node.data?.tier === lowerTier,
     );
     if (!lowerNodes.length) return;
-    const newEdges = [];
+    const newEdges: AppEdge[] = [];
     for (const newNode of nextNodes) {
       for (const target of lowerNodes) {
         newEdges.push({
@@ -813,18 +846,18 @@ export default function App() {
     }
   };
 
-  const selectTopology = async (id) => {
+  const selectTopology = async (id: number): Promise<void> => {
     if (!id || id === activeId) return;
     setActiveId(id);
     await loadTopology(id);
   };
 
-  const loadFromJson = async (event) => {
+  const loadFromJson = async (event: React.ChangeEvent<HTMLInputElement>): Promise<void> => {
     const file = event.target.files?.[0];
     if (!file) return;
     try {
       const text = await file.text();
-      const data = JSON.parse(text);
+      const data: Partial<TopologyResponse> = JSON.parse(text);
       if (!data.nodes || !data.edges) {
         throw new Error("Invalid JSON: missing nodes/edges");
       }
@@ -833,9 +866,9 @@ export default function App() {
       setTopoType(nextType);
       setTopoParams(nextParams);
       setName(data.name || name);
-      const nextEdges = normalizeEdges(data.edges || []);
+      const nextEdges = normalizeEdges((data.edges || []) as AppEdge[]);
       const isNonTree = NON_TREE_TYPES.has(nextType);
-      const withLayout = data.nodes.map((node) => ({
+      const withLayout = (data.nodes || []).map((node: AppNode) => ({
         ...node,
         data: {
           ...node.data,
@@ -878,7 +911,7 @@ export default function App() {
       0.2,
     );
     const viewportEl = wrapper.querySelector(".react-flow__viewport");
-    if (!viewportEl) return;
+    if (!viewportEl || !(viewportEl instanceof HTMLElement)) return;
     const prevTransform = viewportEl.style.transform;
     const prevWidth = viewportEl.style.width;
     const prevHeight = viewportEl.style.height;
@@ -1144,8 +1177,9 @@ export default function App() {
   const selectionTier = useMemo(() => {
     if (!hasSelection || selectedType !== "node") return DEFAULT_TIER.server;
     const node = nodes.find((n) => n.id === selectedId);
+    const kind = node?.data?.kind || "server";
     return (
-      node?.data?.tier ?? DEFAULT_TIER[node?.data?.kind] ?? DEFAULT_TIER.server
+      node?.data?.tier ?? DEFAULT_TIER[kind] ?? DEFAULT_TIER.server
     );
   }, [hasSelection, nodes, selectedId, selectedType]);
 
@@ -1175,7 +1209,7 @@ export default function App() {
             <button
               key={tab}
               className={`tab ${activeTab === tab ? "active" : ""}`}
-              onClick={() => setActiveTab(tab)}
+              onClick={() => setActiveTab(tab as ActiveTab)}
             >
               {tab === "topology" ? t("Topology") : t("Nodes")}
             </button>
@@ -1187,7 +1221,7 @@ export default function App() {
             <div className="group-body">
               <select
                 value={locale}
-                onChange={(e) => setLocale(e.target.value)}
+                onChange={(e) => setLocale(e.target.value as Locale)}
               >
                 <option value="en">{t("English")}</option>
                 <option value="zh-TW">{t("繁體中文")}</option>
@@ -1398,7 +1432,7 @@ export default function App() {
               <label className="field">
                 <span>{t("Label")}</span>
                 <input
-                  value={selectionLabel}
+                  value={String(selectionLabel)}
                   onChange={(e) => updateLabel(e.target.value)}
                   placeholder={t("Label")}
                 />
@@ -1476,7 +1510,7 @@ export default function App() {
                   <span>{t("Type")}</span>
                   <select
                     value={topoType}
-                    onChange={(e) => setTopoType(e.target.value)}
+                    onChange={(e) => setTopoType(e.target.value as TopologyType)}
                   >
                     <option value="custom">{t("Custom")}</option>
                     <option value="leaf-spine">{t("Leaf-Spine")}</option>
