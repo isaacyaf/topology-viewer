@@ -21,14 +21,20 @@
 		"python.testing.unittestEnabled": false,
 		"python.testing.pytestEnabled": true,
 		"files.insertFinalNewline": true,
+        "editor.formatOnSave": true,
         "[python]": {
         	"editor.defaultFormatter": "charliermarsh.ruff",
-        	"editor.formatOnSave": true,
             "editor.codeActionsOnSave": {
               "source.fixAll": "explicit",
               "source.organizeImports": "explicit"
             },
         },
+		"[javascript]": {
+			"editor.defaultFormatter": "esbenp.prettier-vscode"
+		},
+		"[javascriptreact]": {
+			"editor.defaultFormatter": "esbenp.prettier-vscode"
+		},
 		"testing.coverageToolbarEnabled": true,
 
 		"folder-path-color.folders": [
