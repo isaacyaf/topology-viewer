@@ -350,6 +350,7 @@ export default function App() {
   const [customKind, setCustomKind] = useState<NodeKind>("switch");
   const [customTier, setCustomTier] = useState<number>(2);
   const [customCount, setCustomCount] = useState<number>(1);
+  const [customSplit, setCustomSplit] = useState<number>(8);
 
   // Sidebar state
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(true);
@@ -803,6 +804,8 @@ export default function App() {
     const count = Math.max(1, Number(customCount) || 1);
     const tier = Math.max(1, Number(customTier) || 1);
     const kind = customKind || "switch";
+    const splitCount =
+      kind === "patch" ? Math.max(2, Math.min(64, Number(customSplit) || 8)) : undefined;
     const baseNodes = nodesRef.current;
     const baseIndex = baseNodes.filter(
       (node) => node.data?.kind === kind,
@@ -822,6 +825,7 @@ export default function App() {
           label: `${KIND_CONFIG[kind]?.label || kind} ${baseIndex + i + 1}`,
           kind,
           tier,
+          splitCount,
           layout: "tree",
         },
       });
@@ -952,7 +956,16 @@ export default function App() {
     URL.revokeObjectURL(url);
   };
 
-  const addNodeBatch = (kind: NodeKind, tier: number, count: number): void => {
+  const addNodeBatch = (
+    kind: NodeKind,
+    tier: number,
+    count: number,
+    splitCount?: number,
+  ): void => {
+    const resolvedSplit =
+      kind === "patch"
+        ? Math.max(2, Math.min(64, Number(splitCount) || 8))
+        : undefined;
     for (let i = 0; i < count; i++) {
       const id = `${kind}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
       const newNode: AppNode = {
@@ -963,6 +976,7 @@ export default function App() {
           label: `${kind.charAt(0).toUpperCase() + kind.slice(1)} ${nodes.length + i + 1}`,
           kind,
           tier,
+          splitCount: resolvedSplit,
         },
       };
       setNodes((nds) => [...nds, newNode]);
@@ -1383,11 +1397,13 @@ export default function App() {
             customKind={customKind}
             customTier={customTier}
             customCount={customCount}
+            customSplit={customSplit}
             onTopoTypeChange={setTopoType}
             onParamChange={updateParam}
             onCustomKindChange={setCustomKind}
             onCustomTierChange={setCustomTier}
             onCustomCountChange={setCustomCount}
+            onCustomSplitChange={setCustomSplit}
             onAddCustomBatch={addCustomBatch}
           />
         </SidebarSection>

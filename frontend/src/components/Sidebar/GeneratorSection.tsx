@@ -7,11 +7,13 @@ interface GeneratorSectionProps {
   customKind: NodeKind;
   customTier: number;
   customCount: number;
+  customSplit: number;
   onTopoTypeChange: (type: TopologyType) => void;
   onParamChange: (key: string, value: string | number) => void;
   onCustomKindChange: (value: NodeKind) => void;
   onCustomTierChange: (value: number) => void;
   onCustomCountChange: (value: number) => void;
+  onCustomSplitChange: (value: number) => void;
   onAddCustomBatch: () => void;
 }
 
@@ -22,11 +24,13 @@ export default function GeneratorSection({
   customKind,
   customTier,
   customCount,
+  customSplit,
   onTopoTypeChange,
   onParamChange,
   onCustomKindChange,
   onCustomTierChange,
   onCustomCountChange,
+  onCustomSplitChange,
   onAddCustomBatch,
 }: GeneratorSectionProps) {
   const t = (en: string, zhTW: string) => (locale === "zh-TW" ? zhTW : en);
@@ -37,7 +41,7 @@ export default function GeneratorSection({
       <option value="switch">Switch</option>
       <option value="server">Server</option>
       <option value="asic">ASIC</option>
-      <option value="patch">Patch</option>
+      <option value="patch">Patch Panel</option>
     </select>
   );
 
@@ -310,6 +314,18 @@ export default function GeneratorSection({
               onChange={(e) => onCustomCountChange(Math.max(1, Number(e.target.value) || 1))}
             />
           </div>
+          {customKind === "patch" && (
+            <div className="field">
+              <label>{t("Split Count", "分割數量")}</label>
+              <input
+                type="number"
+                min="2"
+                max="64"
+                value={customSplit}
+                onChange={(e) => onCustomSplitChange(Math.max(2, Math.min(64, Number(e.target.value) || 8)))}
+              />
+            </div>
+          )}
           <button className="btn" onClick={onAddCustomBatch}>
             {t("Add Custom Nodes", "新增自訂節點")}
           </button>

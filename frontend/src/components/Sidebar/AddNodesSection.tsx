@@ -4,7 +4,12 @@ import type { Locale, NodeKind } from "../../types";
 interface AddNodesSectionProps {
   locale: Locale;
   onAddNode: (kind: NodeKind) => void;
-  onAddCustomNodes: (kind: NodeKind, tier: number, count: number) => void;
+  onAddCustomNodes: (
+    kind: NodeKind,
+    tier: number,
+    count: number,
+    splitCount?: number,
+  ) => void;
 }
 
 export default function AddNodesSection({
@@ -18,10 +23,18 @@ export default function AddNodesSection({
   const [customKind, setCustomKind] = useState<NodeKind>("switch");
   const [customTier, setCustomTier] = useState<number>(1);
   const [customCount, setCustomCount] = useState<number>(1);
+  const [customSplit, setCustomSplit] = useState<number>(8);
   const [showCustom, setShowCustom] = useState<boolean>(false);
 
   const handleAddCustom = () => {
-    onAddCustomNodes(customKind, customTier, customCount);
+    onAddCustomNodes(
+      customKind,
+      customTier,
+      customCount,
+      customKind === "patch"
+        ? Math.max(2, Math.min(64, Number(customSplit) || 8))
+        : undefined,
+    );
     // Reset form
     setCustomCount(1);
   };
@@ -63,7 +76,7 @@ export default function AddNodesSection({
           title={t("Add Patch Panel", "新增配線板")}
           style={{ gridColumn: "1 / -1" }}
         >
-          🔌 Patch
+          🔌 Patch Panel
         </button>
       </div>
 
@@ -85,7 +98,7 @@ export default function AddNodesSection({
                 <option value="switch">Switch</option>
                 <option value="server">Server</option>
                 <option value="asic">ASIC</option>
-                <option value="patch">Patch</option>
+                <option value="patch">Patch Panel</option>
               </select>
             </div>
 
@@ -109,6 +122,19 @@ export default function AddNodesSection({
                 onChange={(e) => setCustomCount(Number(e.target.value))}
               />
             </div>
+
+            {customKind === "patch" && (
+              <div className="field">
+                <label>{t("Split Count", "分割數量")}</label>
+                <input
+                  type="number"
+                  min="2"
+                  max="64"
+                  value={customSplit}
+                  onChange={(e) => setCustomSplit(Number(e.target.value))}
+                />
+              </div>
+            )}
 
             <button className="btn" onClick={handleAddCustom}>
               {t("Add to Topology", "加入拓撲")}

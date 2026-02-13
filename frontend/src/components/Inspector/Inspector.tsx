@@ -64,7 +64,7 @@ export default function Inspector({
               <option value="switch">Switch</option>
               <option value="server">Server</option>
               <option value="asic">ASIC</option>
-              <option value="patch">Patch</option>
+              <option value="patch">Patch Panel</option>
             </select>
           </div>
 
