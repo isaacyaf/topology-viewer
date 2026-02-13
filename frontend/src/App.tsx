@@ -325,7 +325,16 @@ const CustomNodeGrid = memo<CustomNodeProps>(({ data }) => {
 
 export default function App() {
   const [locale, setLocale] = useState<Locale>("en");
-  const [theme, setTheme] = useState<Theme>("light");
+  const [theme, setTheme] = useState<Theme>(() => {
+    // Load theme from localStorage or detect system preference
+    const savedTheme = localStorage.getItem("theme") as Theme | null;
+    if (savedTheme === "light" || savedTheme === "dark") {
+      return savedTheme;
+    }
+    // Fallback to system preference if no saved theme
+    const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+    return prefersDark ? "dark" : "light";
+  });
   const [topologies, setTopologies] = useState<TopologySummary[]>([]);
   const [activeId, setActiveId] = useState<number | null>(null);
   const [name, setName] = useState<string>("Default");
@@ -414,23 +423,6 @@ export default function App() {
       }
       return next;
     });
-  }, []);
-
-  // Load theme from localStorage or detect system preference on mount
-  useEffect(() => {
-    const savedTheme = localStorage.getItem("theme") as Theme | null;
-
-    if (savedTheme === "light" || savedTheme === "dark") {
-      // Use saved theme if available
-      setTheme(savedTheme);
-      document.documentElement.setAttribute("data-theme", savedTheme);
-    } else {
-      // Detect system preference if no saved theme
-      const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-      const systemTheme: Theme = prefersDark ? "dark" : "light";
-      setTheme(systemTheme);
-      document.documentElement.setAttribute("data-theme", systemTheme);
-    }
   }, []);
 
   // Apply theme when it changes
@@ -1330,6 +1322,8 @@ export default function App() {
           expanded={expandedSections.has("workspace")}
           onToggle={() => toggleSection("workspace")}
           locale={locale}
+          sidebarOpen={sidebarOpen}
+          onSidebarToggle={() => setSidebarOpen(true)}
         >
           <WorkspaceSection
             locale={locale}
@@ -1354,6 +1348,8 @@ export default function App() {
           expanded={expandedSections.has("generator")}
           onToggle={() => toggleSection("generator")}
           locale={locale}
+          sidebarOpen={sidebarOpen}
+          onSidebarToggle={() => setSidebarOpen(true)}
         >
           <GeneratorSection
             locale={locale}
@@ -1380,6 +1376,8 @@ export default function App() {
           expanded={expandedSections.has("addNodes")}
           onToggle={() => toggleSection("addNodes")}
           locale={locale}
+          sidebarOpen={sidebarOpen}
+          onSidebarToggle={() => setSidebarOpen(true)}
         >
           <AddNodesSection
             locale={locale}
@@ -1397,6 +1395,8 @@ export default function App() {
           expanded={expandedSections.has("nodesList")}
           onToggle={() => toggleSection("nodesList")}
           locale={locale}
+          sidebarOpen={sidebarOpen}
+          onSidebarToggle={() => setSidebarOpen(true)}
         >
           <NodesListSection
             locale={locale}
@@ -1414,6 +1414,8 @@ export default function App() {
           expanded={expandedSections.has("layout")}
           onToggle={() => toggleSection("layout")}
           locale={locale}
+          sidebarOpen={sidebarOpen}
+          onSidebarToggle={() => setSidebarOpen(true)}
         >
           <LayoutSection
             locale={locale}
@@ -1437,6 +1439,8 @@ export default function App() {
           expanded={expandedSections.has("settings")}
           onToggle={() => toggleSection("settings")}
           locale={locale}
+          sidebarOpen={sidebarOpen}
+          onSidebarToggle={() => setSidebarOpen(true)}
         >
           <SettingsSection locale={locale} theme={theme} onLocaleChange={setLocale} onThemeChange={setTheme} />
         </SidebarSection>

@@ -386,6 +386,9 @@ export interface SidebarSectionProps {
   badge?: string | number;
   expanded: boolean;
   onToggle: () => void;
+  locale: Locale;
+  sidebarOpen: boolean;
+  onSidebarToggle: () => void;
   children: React.ReactNode;
 }
 

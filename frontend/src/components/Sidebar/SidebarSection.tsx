@@ -1,16 +1,5 @@
-import type { Locale } from "../../types";
-
-interface SidebarSectionProps {
-  id: string;
-  title: string;
-  titleZhTW: string;
-  icon: string;
-  badge?: string | number;
-  expanded: boolean;
-  onToggle: () => void;
-  locale: Locale;
-  children: React.ReactNode;
-}
+import { useRef } from "react";
+import type { SidebarSectionProps } from "../../types";
 
 export default function SidebarSection({
   id,
@@ -21,13 +10,32 @@ export default function SidebarSection({
   expanded,
   onToggle,
   locale,
+  sidebarOpen,
+  onSidebarToggle,
   children,
 }: SidebarSectionProps) {
   const displayTitle = locale === "zh-TW" ? titleZhTW : title;
+  const sectionRef = useRef<HTMLDivElement>(null);
+
+  const handleClick = () => {
+    if (!sidebarOpen) {
+      // If sidebar is collapsed, expand it first
+      onSidebarToggle();
+      // Wait for sidebar to expand, then scroll to this section
+      setTimeout(() => {
+        sectionRef.current?.scrollIntoView({
+          behavior: "smooth",
+          block: "nearest",
+        });
+      }, 300); // Match the sidebar transition duration
+    }
+    // Always toggle the section
+    onToggle();
+  };
 
   return (
-    <div className="sidebar-section">
-      <div className="sidebar-section-header" onClick={onToggle}>
+    <div className="sidebar-section" ref={sectionRef}>
+      <div className="sidebar-section-header" onClick={handleClick}>
         <span className="sidebar-section-icon">{icon}</span>
         <span className="sidebar-section-title">{displayTitle}</span>
         {badge !== undefined && (
