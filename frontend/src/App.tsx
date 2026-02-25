@@ -35,6 +35,7 @@ import type {
   HistoryState,
   Locale,
   Theme,
+  ViewMode,
   TranslationFunction,
   TopologyType,
   TopologyParamsMap,
@@ -169,6 +170,9 @@ const TRANSLATIONS: Record<Locale, Record<string, string>> = {
     "+ ASIC": "+ ASIC",
     "+ Patch": "+ 配線盤",
     Language: "語言",
+    "View Mode": "檢視模式",
+    Edit: "編輯",
+    Present: "展示",
     English: "英文",
     繁體中文: "繁體中文",
     Untitled: "未命名",
@@ -335,6 +339,10 @@ export default function App() {
     const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
     return prefersDark ? "dark" : "light";
   });
+  const [viewMode, setViewMode] = useState<ViewMode>(() => {
+    const savedMode = localStorage.getItem("viewMode") as ViewMode | null;
+    return savedMode === "present" ? "present" : "edit";
+  });
   const [topologies, setTopologies] = useState<TopologySummary[]>([]);
   const [activeId, setActiveId] = useState<number | null>(null);
   const [name, setName] = useState<string>("Default");
@@ -431,6 +439,10 @@ export default function App() {
     document.documentElement.setAttribute("data-theme", theme);
     localStorage.setItem("theme", theme);
   }, [theme]);
+
+  useEffect(() => {
+    localStorage.setItem("viewMode", viewMode);
+  }, [viewMode]);
 
   // Load sidebar state from localStorage
   useEffect(() => {
@@ -1326,7 +1338,8 @@ export default function App() {
   };
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell ${viewMode === "present" ? "present-mode" : ""}`}>
+      {viewMode === "edit" && (
       <Sidebar open={sidebarOpen} onToggle={() => setSidebarOpen(!sidebarOpen)} locale={locale} status={status} lastSaved={lastSaved}>
         <SidebarSection
           id="workspace"
@@ -1457,11 +1470,26 @@ export default function App() {
           sidebarOpen={sidebarOpen}
           onSidebarToggle={() => setSidebarOpen(true)}
         >
-          <SettingsSection locale={locale} theme={theme} onLocaleChange={setLocale} onThemeChange={setTheme} />
+          <SettingsSection
+            locale={locale}
+            theme={theme}
+            viewMode={viewMode}
+            onLocaleChange={setLocale}
+            onThemeChange={setTheme}
+            onViewModeChange={setViewMode}
+          />
         </SidebarSection>
       </Sidebar>
+      )}
 
       <div className="canvas-container">
+        <button
+          className="btn ghost view-mode-toggle"
+          onClick={() => setViewMode(viewMode === "edit" ? "present" : "edit")}
+          title={viewMode === "edit" ? t("Present") : t("Edit")}
+        >
+          {viewMode === "edit" ? t("Present") : t("Edit")}
+        </button>
         <ReactFlow
           nodes={renderNodes}
           edges={edges}
@@ -1476,12 +1504,12 @@ export default function App() {
           fitView
           defaultViewport={defaultViewport}
         >
-          <MiniMap />
-          <Controls />
-          <Background gap={18} size={1} />
+          {viewMode === "edit" && <MiniMap />}
+          {viewMode === "edit" && <Controls />}
+          {viewMode === "edit" && <Background gap={18} size={1} />}
         </ReactFlow>
 
-        {selected && (
+        {viewMode === "edit" && selected && (
           <Inspector
             selected={selected}
             nodes={nodes}

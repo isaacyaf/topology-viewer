@@ -60,6 +60,10 @@ body {
   overflow: hidden;
 }
 
+.app-shell.present-mode {
+  grid-template-columns: 1fr;
+}
+
 .app-header {
   display: grid;
   grid-template-columns: 1fr auto auto;
@@ -582,6 +586,18 @@ body {
   width: 100%;
   height: 100vh;
   overflow: hidden;
+}
+
+.view-mode-toggle {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  z-index: 20;
+}
+
+.app-shell.present-mode .canvas-container,
+.app-shell.present-mode .react-flow {
+  background: #ffffff;
 }
 
 /* ============================================================================

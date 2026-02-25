@@ -15,6 +15,7 @@ On top of the existing editable topology capabilities, complete three areas: rul
 - Tier 2 generators: Expanded Clos, Core-and-Pod
 - Tier 3 reference topologies: Torus, Dragonfly, Butterfly, Mesh/Ring/Star
 - Topology metadata persistence (`topo_type`, `topo_params`)
+- Dual-mode workspace baseline (Edit/Present) for cleaner demos/screenshots
 
 ### High-Priority Gaps
 
@@ -83,6 +84,9 @@ On top of the existing editable topology capabilities, complete three areas: rul
 - Topology editing UX:
   - Multi-select and bulk actions (delete, tier update)
   - Safer destructive actions (confirmation + undo consistency)
+- Presentation UX:
+  - Dual-mode workspace (Edit/Present)
+  - Present mode hides editing chrome (sidebar/inspector/minimap/controls/grid) for clean capture
 - Data portability:
   - Add import JSON to complement export flow
   - Validate imported schema with actionable error messages
@@ -90,6 +94,8 @@ On top of the existing editable topology capabilities, complete three areas: rul
   - Move all user-facing strings into locale resources
   - Add language fallback behavior for missing keys
 - Minimum acceptance:
+  - Users can switch between Edit and Present modes from Settings
+  - Present mode provides a clean canvas suitable for screenshots and demos
   - Users can import an exported topology without manual fixes
   - Major actions (delete/import/generate) provide clear success/error feedback
 

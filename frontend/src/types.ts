@@ -305,6 +305,11 @@ export type Locale = "en" | "zh-TW";
 export type Theme = "light" | "dark";
 
 /**
+ * View mode types
+ */
+export type ViewMode = "edit" | "present";
+
+/**
  * Translation function type
  */
 export type TranslationFunction = (
