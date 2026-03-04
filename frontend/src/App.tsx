@@ -351,6 +351,8 @@ export default function App() {
   const [nodes, setNodes, onNodesChange] = useNodesState<CustomNodeData>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const [selected, setSelected] = useState<Selection | null>(null);
+  const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>([]);
+  const [selectedEdgeIds, setSelectedEdgeIds] = useState<string[]>([]);
   const [status, setStatus] = useState<AppStatus>("idle");
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const [activeTab, setActiveTab] = useState<ActiveTab>("topology");
@@ -369,6 +371,8 @@ export default function App() {
   const statusTimerRef = useRef<number | null>(null);
   const historyRef = useRef<HistoryState>({ past: [], future: [] });
   const suppressHistoryRef = useRef<boolean>(false);
+  const clipboardRef = useRef<{ nodes: AppNode[]; edges: AppEdge[] } | null>(null);
+  const pasteCountRef = useRef<number>(0);
   const reactFlowInstanceRef = useRef<ReactFlowInstance | null>(null);
   const reactFlowWrapperRef = useRef<HTMLDivElement | null>(null);
   const nodesRef = useRef<AppNode[]>([]);
@@ -470,6 +474,11 @@ export default function App() {
   }, [sidebarOpen, expandedSections]);
 
   const handleSelectionChange = useCallback((items: OnSelectionChangeParams) => {
+    const nextNodeIds = (items.nodes || []).map((node) => node.id);
+    const nextEdgeIds = (items.edges || []).map((edge) => edge.id);
+    setSelectedNodeIds(nextNodeIds);
+    setSelectedEdgeIds(nextEdgeIds);
+
     let nextSelection: Selection | null = null;
     if (items.nodes?.length) {
       nextSelection = { type: "node", id: items.nodes[0]!.id };
@@ -1217,7 +1226,80 @@ export default function App() {
       setEdges((eds) => eds.filter((e) => e.id !== selectedId));
     }
     setSelected(null);
+    setSelectedNodeIds([]);
+    setSelectedEdgeIds([]);
   };
+
+  const copySelection = useCallback(() => {
+    const nodeIds = new Set(selectedNodeIds);
+    const copiedNodes = nodes.filter((node) => nodeIds.has(node.id));
+    if (!copiedNodes.length) return;
+
+    const edgeIds = new Set(selectedEdgeIds);
+    const copiedEdges = edges.filter((edge) => {
+      const connectedInside =
+        nodeIds.has(edge.source) && nodeIds.has(edge.target);
+      return connectedInside || edgeIds.has(edge.id);
+    });
+
+    clipboardRef.current = {
+      nodes: copiedNodes.map((node) => ({
+        ...node,
+        position: { ...node.position },
+        data: { ...node.data },
+      })),
+      edges: copiedEdges.map((edge) => ({ ...edge })),
+    };
+    pasteCountRef.current = 0;
+  }, [edges, nodes, selectedEdgeIds, selectedNodeIds]);
+
+  const pasteSelection = useCallback(() => {
+    const clipboard = clipboardRef.current;
+    if (!clipboard?.nodes.length) return;
+
+    pasteCountRef.current += 1;
+    const offset = 40 * pasteCountRef.current;
+    const idMap = new Map<string, string>();
+
+    const pastedNodes = clipboard.nodes.map((node, index) => {
+      const nextId = `${node.id}-copy-${Date.now()}-${index}`;
+      idMap.set(node.id, nextId);
+      return {
+        ...node,
+        id: nextId,
+        selected: true,
+        position: {
+          x: node.position.x + offset,
+          y: node.position.y + offset,
+        },
+        data: { ...node.data },
+      };
+    });
+
+    const pastedEdges = clipboard.edges
+      .filter((edge) => idMap.has(edge.source) && idMap.has(edge.target))
+      .map((edge, index) => ({
+        ...edge,
+        id: `${edge.id}-copy-${Date.now()}-${index}`,
+        source: idMap.get(edge.source)!,
+        target: idMap.get(edge.target)!,
+        selected: true,
+      }));
+
+    setNodes((nds) =>
+      nds
+        .map((node) => ({ ...node, selected: false }))
+        .concat(pastedNodes),
+    );
+    setEdges((eds) =>
+      eds
+        .map((edge) => ({ ...edge, selected: false }))
+        .concat(pastedEdges),
+    );
+    setSelectedNodeIds(pastedNodes.map((node) => node.id));
+    setSelectedEdgeIds(pastedEdges.map((edge) => edge.id));
+    setSelected({ type: "node", id: pastedNodes[0]!.id });
+  }, [setEdges, setNodes]);
 
   useEffect(() => {
     const handle = setTimeout(() => {
@@ -1246,6 +1328,16 @@ export default function App() {
         redo();
         return;
       }
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "c") {
+        event.preventDefault();
+        copySelection();
+        return;
+      }
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "v") {
+        event.preventDefault();
+        pasteSelection();
+        return;
+      }
       if (event.key === "Delete" || event.key === "Backspace") {
         event.preventDefault();
         removeSelection();
@@ -1253,7 +1345,7 @@ export default function App() {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [redo, removeSelection, undo]);
+  }, [copySelection, pasteSelection, redo, removeSelection, undo]);
 
   const updateLabel = (value) => {
     if (!hasSelection) return;
