@@ -4,6 +4,8 @@
 
 Editable data center topology viewer with a React Flow frontend and FastAPI backend (front/back separated).
 
+This application was created with CodeX.
+
 ## Status
 
 ### Completed
