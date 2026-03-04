@@ -4,7 +4,14 @@ interface LayoutSectionProps {
   locale: Locale;
   layerGap: number;
   endGap: boolean;
+  selectedCount: number;
   onAutoLayout: () => void;
+  onAlignLeft: () => void;
+  onAlignRight: () => void;
+  onAlignTop: () => void;
+  onAlignBottom: () => void;
+  onDistributeHorizontal: () => void;
+  onDistributeVertical: () => void;
   onUndo: () => void;
   onRedo: () => void;
   onLayerGapChange: (value: number) => void;
@@ -17,7 +24,14 @@ export default function LayoutSection({
   locale,
   layerGap,
   endGap,
+  selectedCount,
   onAutoLayout,
+  onAlignLeft,
+  onAlignRight,
+  onAlignTop,
+  onAlignBottom,
+  onDistributeHorizontal,
+  onDistributeVertical,
   onUndo,
   onRedo,
   onLayerGapChange,
@@ -28,6 +42,8 @@ export default function LayoutSection({
   const t = (en: string, zhTW: string) => (locale === "zh-TW" ? zhTW : en);
   const isMac = navigator.platform.toUpperCase().indexOf("MAC") >= 0;
   const modKey = isMac ? "⌘" : "Ctrl";
+  const canAlign = selectedCount >= 2;
+  const canDistribute = selectedCount >= 3;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
@@ -54,6 +70,40 @@ export default function LayoutSection({
         >
           ↷ {t("Redo", "重做")}
         </button>
+      </div>
+
+      <div className="field">
+        <label>
+          {t("Align Selected", "對齊已選節點")} ({selectedCount})
+        </label>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem" }}>
+          <button className="btn ghost" onClick={onAlignLeft} disabled={!canAlign}>
+            {t("Align Left", "靠左對齊")}
+          </button>
+          <button className="btn ghost" onClick={onAlignRight} disabled={!canAlign}>
+            {t("Align Right", "靠右對齊")}
+          </button>
+          <button className="btn ghost" onClick={onAlignTop} disabled={!canAlign}>
+            {t("Align Top", "靠上對齊")}
+          </button>
+          <button className="btn ghost" onClick={onAlignBottom} disabled={!canAlign}>
+            {t("Align Bottom", "靠下對齊")}
+          </button>
+          <button
+            className="btn ghost"
+            onClick={onDistributeHorizontal}
+            disabled={!canDistribute}
+          >
+            {t("Distribute Horizontally", "水平等分")}
+          </button>
+          <button
+            className="btn ghost"
+            onClick={onDistributeVertical}
+            disabled={!canDistribute}
+          >
+            {t("Distribute Vertically", "垂直等分")}
+          </button>
+        </div>
       </div>
 
       <div className="field">

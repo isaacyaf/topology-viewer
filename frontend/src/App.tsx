@@ -203,6 +203,9 @@ const DEFAULT_TIER: DefaultTierMap = {
   patch: 2,
 };
 
+const FALLBACK_NODE_WIDTH = 164;
+const FALLBACK_NODE_HEIGHT = 60;
+
 const RackIcon = () => (
   <svg viewBox="0 0 24 24" aria-hidden="true">
     <rect x="5" y="3" width="14" height="18" rx="2" />
@@ -1204,6 +1207,109 @@ export default function App() {
     applySnapshot(next);
   }, [applySnapshot]);
 
+  const alignSelectedNodes = useCallback(
+    (
+      mode:
+        | "left"
+        | "right"
+        | "top"
+        | "bottom"
+        | "distribute-horizontal"
+        | "distribute-vertical",
+    ) => {
+      if (selectedNodeIds.length < 2) return;
+
+      setNodes((nds) => {
+        const selectedSet = new Set(selectedNodeIds);
+        const selectedNodes = nds.filter((node) => selectedSet.has(node.id));
+        if (selectedNodes.length < 2) return nds;
+
+        const sizeOf = (node: AppNode) => ({
+          width: node.width ?? FALLBACK_NODE_WIDTH,
+          height: node.height ?? FALLBACK_NODE_HEIGHT,
+        });
+
+        const nextPositions = new Map<string, { x: number; y: number }>();
+
+        if (mode === "left") {
+          const minX = Math.min(...selectedNodes.map((node) => node.position.x));
+          selectedNodes.forEach((node) =>
+            nextPositions.set(node.id, { x: minX, y: node.position.y }),
+          );
+        }
+
+        if (mode === "right") {
+          const maxRight = Math.max(
+            ...selectedNodes.map((node) => node.position.x + sizeOf(node).width),
+          );
+          selectedNodes.forEach((node) =>
+            nextPositions.set(node.id, {
+              x: maxRight - sizeOf(node).width,
+              y: node.position.y,
+            }),
+          );
+        }
+
+        if (mode === "top") {
+          const minY = Math.min(...selectedNodes.map((node) => node.position.y));
+          selectedNodes.forEach((node) =>
+            nextPositions.set(node.id, { x: node.position.x, y: minY }),
+          );
+        }
+
+        if (mode === "bottom") {
+          const maxBottom = Math.max(
+            ...selectedNodes.map((node) => node.position.y + sizeOf(node).height),
+          );
+          selectedNodes.forEach((node) =>
+            nextPositions.set(node.id, {
+              x: node.position.x,
+              y: maxBottom - sizeOf(node).height,
+            }),
+          );
+        }
+
+        if (mode === "distribute-horizontal" && selectedNodes.length >= 3) {
+          const sorted = [...selectedNodes].sort(
+            (a, b) => a.position.x - b.position.x,
+          );
+          const first = sorted[0]!;
+          const last = sorted[sorted.length - 1]!;
+          const span = last.position.x - first.position.x;
+          const step = span / (sorted.length - 1);
+          sorted.forEach((node, index) => {
+            nextPositions.set(node.id, {
+              x: first.position.x + step * index,
+              y: node.position.y,
+            });
+          });
+        }
+
+        if (mode === "distribute-vertical" && selectedNodes.length >= 3) {
+          const sorted = [...selectedNodes].sort(
+            (a, b) => a.position.y - b.position.y,
+          );
+          const first = sorted[0]!;
+          const last = sorted[sorted.length - 1]!;
+          const span = last.position.y - first.position.y;
+          const step = span / (sorted.length - 1);
+          sorted.forEach((node, index) => {
+            nextPositions.set(node.id, {
+              x: node.position.x,
+              y: first.position.y + step * index,
+            });
+          });
+        }
+
+        return nds.map((node) => {
+          const next = nextPositions.get(node.id);
+          return next ? { ...node, position: next } : node;
+        });
+      });
+    },
+    [selectedNodeIds, setNodes],
+  );
+
   const renderKindSelect = (value, onChange) => (
     <select value={value} onChange={(e) => onChange(e.target.value)}>
       <option value="switch">{t("Switch")}</option>
@@ -1474,7 +1580,14 @@ export default function App() {
             locale={locale}
             layerGap={topoParams.layerGap ?? 180}
             endGap={layoutEndGap}
+            selectedCount={selectedNodeIds.length}
             onAutoLayout={autoLayout}
+            onAlignLeft={() => alignSelectedNodes("left")}
+            onAlignRight={() => alignSelectedNodes("right")}
+            onAlignTop={() => alignSelectedNodes("top")}
+            onAlignBottom={() => alignSelectedNodes("bottom")}
+            onDistributeHorizontal={() => alignSelectedNodes("distribute-horizontal")}
+            onDistributeVertical={() => alignSelectedNodes("distribute-vertical")}
             onUndo={undo}
             onRedo={redo}
             onLayerGapChange={(value) => updateParam("layerGap", value)}

@@ -85,6 +85,11 @@ On top of the existing editable topology capabilities, complete three areas: rul
 - Topology editing UX:
   - Multi-select and bulk actions (delete, tier update)
   - Safer destructive actions (confirmation + undo consistency)
+  - Advanced alignment tools for selected nodes:
+    - Edge-aware alignment using actual node width/height
+    - Center horizontally / center vertically
+    - Make same width / make same height
+    - Keyboard shortcuts and user feedback for alignment actions
 - Presentation UX:
   - Dual-mode workspace (Edit/Present)
   - Present mode hides editing chrome (sidebar/inspector/minimap/controls/grid) for clean capture
@@ -98,6 +103,7 @@ On top of the existing editable topology capabilities, complete three areas: rul
 - Minimum acceptance:
   - Users can switch between Edit and Present modes from Settings
   - Present mode provides a clean canvas suitable for screenshots and demos
+  - Selected nodes support practical alignment/distribution workflows for manual layout refinement
   - Users can import an exported topology without manual fixes
   - Major actions (delete/import/generate) provide clear success/error feedback
 
