@@ -1623,6 +1623,7 @@ export default function App() {
             onCustomCountChange={setCustomCount}
             onCustomSplitChange={setCustomSplit}
             onAddCustomBatch={addCustomBatch}
+            onGenerateTopology={generateTopology}
           />
         </SidebarSection>
 

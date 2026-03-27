@@ -15,6 +15,7 @@ interface GeneratorSectionProps {
   onCustomCountChange: (value: number) => void;
   onCustomSplitChange: (value: number) => void;
   onAddCustomBatch: () => void;
+  onGenerateTopology: () => void;
 }
 
 export default function GeneratorSection({
@@ -32,6 +33,7 @@ export default function GeneratorSection({
   onCustomCountChange,
   onCustomSplitChange,
   onAddCustomBatch,
+  onGenerateTopology,
 }: GeneratorSectionProps) {
   const t = (en: string, zhTW: string) => (locale === "zh-TW" ? zhTW : en);
 
@@ -287,6 +289,12 @@ export default function GeneratorSection({
             {renderKindSelect(topoParams.kind as NodeKind | undefined, (v) => onParamChange("kind", v))}
           </div>
         </>
+      )}
+
+      {topoType !== "custom" && (
+        <button className="btn" onClick={onGenerateTopology}>
+          {t("Generate Topology", "產生拓撲")}
+        </button>
       )}
 
       {topoType === "custom" && (
