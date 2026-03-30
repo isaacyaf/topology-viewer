@@ -30,7 +30,6 @@ import type {
   AppNode,
   AppEdge,
   AppStatus,
-  ActiveTab,
   Selection,
   HistoryState,
   Locale,
@@ -358,7 +357,6 @@ export default function App() {
   const [selectedEdgeIds, setSelectedEdgeIds] = useState<string[]>([]);
   const [status, setStatus] = useState<AppStatus>("idle");
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
-  const [activeTab, setActiveTab] = useState<ActiveTab>("topology");
   const [layoutEndGap, setLayoutEndGap] = useState<boolean>(false);
   const [customKind, setCustomKind] = useState<NodeKind>("switch");
   const [customTier, setCustomTier] = useState<number>(2);
@@ -368,7 +366,7 @@ export default function App() {
   // Sidebar state
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(true);
   const [expandedSections, setExpandedSections] = useState<Set<SidebarSectionId>>(
-    new Set(["workspace", "addNodes", "layout"])
+    new Set(["topology"])
   );
 
   const statusTimerRef = useRef<number | null>(null);
@@ -457,8 +455,11 @@ export default function App() {
     if (savedState) {
       try {
         const { open, sections } = JSON.parse(savedState);
+        const validSections: SidebarSectionId[] = ["topology", "edit", "arrange", "view"];
         setSidebarOpen(open);
-        setExpandedSections(new Set(sections));
+        setExpandedSections(
+          new Set((sections || []).filter((section: SidebarSectionId) => validSections.includes(section))),
+        );
       } catch (e) {
         console.error("Failed to load sidebar state:", e);
       }
@@ -824,65 +825,6 @@ export default function App() {
     setNodes((nds) => nds.concat(next));
   };
 
-  const addCustomBatch = (): void => {
-    const count = Math.max(1, Number(customCount) || 1);
-    const tier = Math.max(1, Number(customTier) || 1);
-    const kind = customKind || "switch";
-    const splitCount =
-      kind === "patch" ? Math.max(2, Math.min(64, Number(customSplit) || 8)) : undefined;
-    const baseNodes = nodesRef.current;
-    const baseIndex = baseNodes.filter(
-      (node) => node.data?.kind === kind,
-    ).length;
-    const stamp = Date.now();
-    const nextNodes: AppNode[] = [];
-    for (let i = 0; i < count; i += 1) {
-      const id = `node-${stamp}-${i}`;
-      nextNodes.push({
-        id,
-        type: "custom",
-        position: {
-          x: 120 + (baseNodes.length + i) * 30,
-          y: 120 + (baseNodes.length + i) * 20,
-        },
-        data: {
-          label: `${KIND_CONFIG[kind]?.label || kind} ${baseIndex + i + 1}`,
-          kind,
-          tier,
-          splitCount,
-          layout: "tree",
-        },
-      });
-    }
-    setNodes((nds) => nds.concat(nextNodes));
-
-    const lowerTier = Math.max(
-      ...baseNodes
-        .map((node) => node.data?.tier)
-        .filter((t) => typeof t === "number" && t < tier),
-      -Infinity,
-    );
-    if (!Number.isFinite(lowerTier)) return;
-    const lowerNodes = baseNodes.filter(
-      (node) => node.data?.tier === lowerTier,
-    );
-    if (!lowerNodes.length) return;
-    const newEdges: AppEdge[] = [];
-    for (const newNode of nextNodes) {
-      for (const target of lowerNodes) {
-        newEdges.push({
-          id: `e-custom-${newNode.id}-${target.id}`,
-          source: newNode.id,
-          target: target.id,
-          sourceHandle: "bottom-out",
-          targetHandle: "top-in",
-          label: topoParams.edge_label ?? "link",
-        });
-      }
-    }
-    setEdges((eds) => eds.concat(newEdges));
-  };
-
   const refreshTopologies = useCallback(async () => {
     try {
       const res = await fetch("/api/topologies");
@@ -1005,6 +947,66 @@ export default function App() {
       };
       setNodes((nds) => [...nds, newNode]);
     }
+  };
+
+  const addCustomBatch = (): void => {
+    const count = Math.max(1, Number(customCount) || 1);
+    const tier = Math.max(1, Number(customTier) || 1);
+    const kind = customKind || "switch";
+    const splitCount =
+      kind === "patch" ? Math.max(2, Math.min(64, Number(customSplit) || 8)) : undefined;
+    const baseNodes = nodesRef.current;
+    const baseIndex = baseNodes.filter((node) => node.data?.kind === kind).length;
+    const stamp = Date.now();
+    const nextNodes: AppNode[] = [];
+
+    for (let i = 0; i < count; i += 1) {
+      const id = `node-${stamp}-${i}`;
+      nextNodes.push({
+        id,
+        type: "custom",
+        position: {
+          x: 120 + (baseNodes.length + i) * 30,
+          y: 120 + (baseNodes.length + i) * 20,
+        },
+        data: {
+          label: `${KIND_CONFIG[kind]?.label || kind} ${baseIndex + i + 1}`,
+          kind,
+          tier,
+          splitCount,
+          layout: "tree",
+        },
+      });
+    }
+
+    setNodes((nds) => nds.concat(nextNodes));
+
+    const lowerTier = Math.max(
+      ...baseNodes
+        .map((node) => node.data?.tier)
+        .filter((value) => typeof value === "number" && value < tier),
+      -Infinity,
+    );
+    if (!Number.isFinite(lowerTier)) return;
+
+    const lowerNodes = baseNodes.filter((node) => node.data?.tier === lowerTier);
+    if (!lowerNodes.length) return;
+
+    const newEdges: AppEdge[] = [];
+    for (const newNode of nextNodes) {
+      for (const target of lowerNodes) {
+        newEdges.push({
+          id: `e-custom-${newNode.id}-${target.id}`,
+          source: newNode.id,
+          target: target.id,
+          sourceHandle: "bottom-out",
+          targetHandle: "top-in",
+          label: topoParams.edge_label ?? "link",
+        });
+      }
+    }
+
+    setEdges((eds) => eds.concat(newEdges));
   };
 
   const loadFromJson = async (event: React.ChangeEvent<HTMLInputElement>): Promise<void> => {
@@ -1540,38 +1542,98 @@ export default function App() {
       {viewMode === "edit" && (
       <Sidebar open={sidebarOpen} onToggle={() => setSidebarOpen(!sidebarOpen)} locale={locale} status={status} lastSaved={lastSaved}>
         <SidebarSection
-          id="workspace"
-          title="Workspace"
-          titleZhTW="工作區"
-          icon="📁"
-          expanded={expandedSections.has("workspace")}
-          onToggle={() => toggleSection("workspace")}
+          id="topology"
+          title="Topology"
+          titleZhTW="拓撲"
+          icon="🧭"
+          expanded={expandedSections.has("topology")}
+          onToggle={() => toggleSection("topology")}
           locale={locale}
           sidebarOpen={sidebarOpen}
           onSidebarToggle={() => setSidebarOpen(true)}
         >
-          <WorkspaceSection
-            locale={locale}
-            topologies={topologies}
-            activeId={activeId}
-            name={name}
-            onLoadTopology={selectTopologyNullable}
-            onNameChange={setName}
-            onNewTopology={createTopology}
-            onSaveTopology={saveTopology}
-            onDeleteTopology={deleteTopology}
-            onLoadFromJson={loadFromJson}
-            onExportJson={exportJson}
-          />
+          <div className="section-stack">
+            <div className="section-group">
+              <div className="section-group-title">{locale === "zh-TW" ? "工作區" : "Workspace"}</div>
+              <WorkspaceSection
+                locale={locale}
+                topologies={topologies}
+                activeId={activeId}
+                name={name}
+                onLoadTopology={selectTopologyNullable}
+                onNameChange={setName}
+                onNewTopology={createTopology}
+                onSaveTopology={saveTopology}
+                onDeleteTopology={deleteTopology}
+                onLoadFromJson={loadFromJson}
+                onExportJson={exportJson}
+              />
+            </div>
+
+            <div className="section-group">
+              <div className="section-group-title">{locale === "zh-TW" ? "產生器" : "Generator"}</div>
+              <GeneratorSection
+                locale={locale}
+                topoType={topoType}
+                topoParams={topoParams}
+                customKind={customKind}
+                customTier={customTier}
+                customCount={customCount}
+                customSplit={customSplit}
+                onTopoTypeChange={setTopoType}
+                onParamChange={updateParam}
+                onCustomKindChange={setCustomKind}
+                onCustomTierChange={setCustomTier}
+                onCustomCountChange={setCustomCount}
+                onCustomSplitChange={setCustomSplit}
+                onAddCustomBatch={addCustomBatch}
+                onGenerateTopology={generateTopology}
+              />
+            </div>
+          </div>
         </SidebarSection>
 
         <SidebarSection
-          id="layout"
-          title="Layout"
-          titleZhTW="布局控制"
+          id="edit"
+          title="Edit"
+          titleZhTW="編修"
+          icon="➕"
+          badge={nodes.length}
+          expanded={expandedSections.has("edit")}
+          onToggle={() => toggleSection("edit")}
+          locale={locale}
+          sidebarOpen={sidebarOpen}
+          onSidebarToggle={() => setSidebarOpen(true)}
+        >
+          <div className="section-stack">
+            <div className="section-group">
+              <div className="section-group-title">{locale === "zh-TW" ? "新增節點" : "Add Nodes"}</div>
+              <AddNodesSection
+                locale={locale}
+                onAddNode={addNode}
+                onAddCustomNodes={addNodeBatch}
+              />
+            </div>
+
+            <div className="section-group">
+              <div className="section-group-title">{locale === "zh-TW" ? "節點列表" : "Node List"}</div>
+              <NodesListSection
+                locale={locale}
+                nodes={nodes}
+                selectedNodeId={selected?.type === "node" ? selected.id : null}
+                onSelectNode={(id) => setSelected({ type: "node", id })}
+              />
+            </div>
+          </div>
+        </SidebarSection>
+
+        <SidebarSection
+          id="arrange"
+          title="Arrange"
+          titleZhTW="排列"
           icon="📐"
-          expanded={expandedSections.has("layout")}
-          onToggle={() => toggleSection("layout")}
+          expanded={expandedSections.has("arrange")}
+          onToggle={() => toggleSection("arrange")}
           locale={locale}
           sidebarOpen={sidebarOpen}
           onSidebarToggle={() => setSidebarOpen(true)}
@@ -1598,80 +1660,12 @@ export default function App() {
         </SidebarSection>
 
         <SidebarSection
-          id="generator"
-          title="Generator"
-          titleZhTW="拓撲生成器"
-          icon="🎨"
-          expanded={expandedSections.has("generator")}
-          onToggle={() => toggleSection("generator")}
-          locale={locale}
-          sidebarOpen={sidebarOpen}
-          onSidebarToggle={() => setSidebarOpen(true)}
-        >
-          <GeneratorSection
-            locale={locale}
-            topoType={topoType}
-            topoParams={topoParams}
-            customKind={customKind}
-            customTier={customTier}
-            customCount={customCount}
-            customSplit={customSplit}
-            onTopoTypeChange={setTopoType}
-            onParamChange={updateParam}
-            onCustomKindChange={setCustomKind}
-            onCustomTierChange={setCustomTier}
-            onCustomCountChange={setCustomCount}
-            onCustomSplitChange={setCustomSplit}
-            onAddCustomBatch={addCustomBatch}
-            onGenerateTopology={generateTopology}
-          />
-        </SidebarSection>
-
-        <SidebarSection
-          id="addNodes"
-          title="Add Nodes"
-          titleZhTW="新增節點"
-          icon="➕"
-          expanded={expandedSections.has("addNodes")}
-          onToggle={() => toggleSection("addNodes")}
-          locale={locale}
-          sidebarOpen={sidebarOpen}
-          onSidebarToggle={() => setSidebarOpen(true)}
-        >
-          <AddNodesSection
-            locale={locale}
-            onAddNode={addNode}
-            onAddCustomNodes={addNodeBatch}
-          />
-        </SidebarSection>
-
-        <SidebarSection
-          id="nodesList"
-          title="Nodes"
-          titleZhTW="節點列表"
-          icon="📋"
-          badge={nodes.length}
-          expanded={expandedSections.has("nodesList")}
-          onToggle={() => toggleSection("nodesList")}
-          locale={locale}
-          sidebarOpen={sidebarOpen}
-          onSidebarToggle={() => setSidebarOpen(true)}
-        >
-          <NodesListSection
-            locale={locale}
-            nodes={nodes}
-            selectedNodeId={selected?.type === "node" ? selected.id : null}
-            onSelectNode={(id) => setSelected({ type: "node", id })}
-          />
-        </SidebarSection>
-
-        <SidebarSection
-          id="settings"
-          title="Settings"
-          titleZhTW="設定"
+          id="view"
+          title="View"
+          titleZhTW="檢視"
           icon="🔧"
-          expanded={expandedSections.has("settings")}
-          onToggle={() => toggleSection("settings")}
+          expanded={expandedSections.has("view")}
+          onToggle={() => toggleSection("view")}
           locale={locale}
           sidebarOpen={sidebarOpen}
           onSidebarToggle={() => setSidebarOpen(true)}
