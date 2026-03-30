@@ -365,12 +365,10 @@ export type DefaultTierMap = Record<NodeKind, number>;
  * Sidebar section identifiers
  */
 export type SidebarSectionId =
-  | "workspace"
-  | "generator"
-  | "addNodes"
-  | "nodesList"
-  | "layout"
-  | "settings";
+  | "topology"
+  | "edit"
+  | "arrange"
+  | "view";
 
 /**
  * Sidebar state

@@ -66,11 +66,8 @@ export default function WorkspaceSection({
         </button>
       </div>
 
-      <button className="btn danger" onClick={onDeleteTopology}>
-        {t("Delete", "刪除")}
-      </button>
-
-      <div style={{ borderTop: "1px solid rgba(0,0,0,0.1)", paddingTop: "0.75rem" }}>
+      <div className="subsection">
+        <div className="subsection-title">{t("Import / Export", "匯入 / 匯出")}</div>
         <label className="btn ghost" style={{ width: "100%", cursor: "pointer" }}>
           {t("Load JSON", "載入 JSON")}
           <input
@@ -87,6 +84,19 @@ export default function WorkspaceSection({
           style={{ width: "100%", marginTop: "0.5rem" }}
         >
           {t("Export JSON", "匯出 JSON")}
+        </button>
+      </div>
+
+      <div className="danger-zone">
+        <div className="subsection-title danger">{t("Danger Zone", "危險操作")}</div>
+        <div className="danger-copy">
+          {t(
+            "Delete the current topology permanently.",
+            "永久刪除目前的拓撲。",
+          )}
+        </div>
+        <button className="btn danger" onClick={onDeleteTopology}>
+          {t("Delete Topology", "刪除拓撲")}
         </button>
       </div>
     </div>
