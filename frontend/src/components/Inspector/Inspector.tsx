@@ -1,3 +1,5 @@
+import { MAX_PATCH_SPLIT, MIN_PATCH_SPLIT } from "../../types";
+
 import type { AppNode, AppEdge, Selection, NodeKind, Locale } from "../../types";
 
 interface InspectorProps {
@@ -73,9 +75,9 @@ export default function Inspector({
               <label>{t("Split Count", "分割數量")}</label>
               <input
                 type="number"
-                min="2"
-                max="64"
-                value={node.data.splitCount ?? 2}
+                min={MIN_PATCH_SPLIT}
+                max={MAX_PATCH_SPLIT}
+                value={node.data.splitCount ?? MIN_PATCH_SPLIT}
                 onChange={(e) => handleSplitChange(Number(e.target.value))}
               />
             </div>

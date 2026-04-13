@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 
+import { DEFAULT_PATCH_SPLIT, MAX_PATCH_SPLIT, MIN_PATCH_SPLIT } from "../../types";
+
 import type { Locale, TopologyType, TopologyParamsMap, NodeKind } from "../../types";
 
 interface GeneratorSectionProps {
@@ -479,11 +481,16 @@ export default function GeneratorSection({
               <label>{t("Split Count", "分割數量")}</label>
               <input
                 type="number"
-                min="2"
-                max="64"
+                min={MIN_PATCH_SPLIT}
+                max={MAX_PATCH_SPLIT}
                 value={customSplit}
                 onChange={(e) =>
-                  onCustomSplitChange(Math.max(2, Math.min(64, Number(e.target.value) || 8)))
+                  onCustomSplitChange(
+                    Math.max(
+                      MIN_PATCH_SPLIT,
+                      Math.min(MAX_PATCH_SPLIT, Number(e.target.value) || DEFAULT_PATCH_SPLIT),
+                    ),
+                  )
                 }
               />
             </div>

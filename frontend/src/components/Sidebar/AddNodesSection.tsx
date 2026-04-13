@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { DEFAULT_PATCH_SPLIT, MAX_PATCH_SPLIT, MIN_PATCH_SPLIT } from "../../types";
+
 import type { Locale, NodeKind } from "../../types";
 
 interface AddNodesSectionProps {
@@ -23,7 +25,7 @@ export default function AddNodesSection({
   const [customKind, setCustomKind] = useState<NodeKind>("switch");
   const [customTier, setCustomTier] = useState<number>(1);
   const [customCount, setCustomCount] = useState<number>(1);
-  const [customSplit, setCustomSplit] = useState<number>(8);
+  const [customSplit, setCustomSplit] = useState<number>(DEFAULT_PATCH_SPLIT);
   const [showCustom, setShowCustom] = useState<boolean>(false);
 
   const handleAddCustom = () => {
@@ -32,7 +34,10 @@ export default function AddNodesSection({
       customTier,
       customCount,
       customKind === "patch"
-        ? Math.max(2, Math.min(64, Number(customSplit) || 8))
+        ? Math.max(
+            MIN_PATCH_SPLIT,
+            Math.min(MAX_PATCH_SPLIT, Number(customSplit) || DEFAULT_PATCH_SPLIT),
+          )
         : undefined,
     );
     // Reset form
@@ -128,8 +133,8 @@ export default function AddNodesSection({
                 <label>{t("Split Count", "分割數量")}</label>
                 <input
                   type="number"
-                  min="2"
-                  max="64"
+                  min={MIN_PATCH_SPLIT}
+                  max={MAX_PATCH_SPLIT}
                   value={customSplit}
                   onChange={(e) => setCustomSplit(Number(e.target.value))}
                 />

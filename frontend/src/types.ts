@@ -1,5 +1,9 @@
 import type { Node as ReactFlowNode, Edge as ReactFlowEdge } from "reactflow";
 
+export const MIN_PATCH_SPLIT = 2;
+export const DEFAULT_PATCH_SPLIT = 8;
+export const MAX_PATCH_SPLIT = 1024;
+
 // ============================================================================
 // Node & Edge Types
 // ============================================================================
@@ -21,7 +25,7 @@ export interface CustomNodeData {
   label: string;
   kind: NodeKind;
   tier: number;
-  splitCount?: number; // Only for patch panels (2-64)
+  splitCount?: number; // Only for patch panels (2-1024)
   layout?: NodeLayout;
 }
 

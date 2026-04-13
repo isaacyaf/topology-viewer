@@ -26,6 +26,8 @@ import ReactFlow, {
 import { toPng } from "html-to-image";
 import "reactflow/dist/style.css";
 
+import { DEFAULT_PATCH_SPLIT, MAX_PATCH_SPLIT, MIN_PATCH_SPLIT } from "./types";
+
 import type {
   AppNode,
   AppEdge,
@@ -930,7 +932,10 @@ export default function App() {
   ): void => {
     const resolvedSplit =
       kind === "patch"
-        ? Math.max(2, Math.min(64, Number(splitCount) || 8))
+        ? Math.max(
+            MIN_PATCH_SPLIT,
+            Math.min(MAX_PATCH_SPLIT, Number(splitCount) || DEFAULT_PATCH_SPLIT),
+          )
         : undefined;
     for (let i = 0; i < count; i++) {
       const id = `${kind}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
@@ -954,7 +959,12 @@ export default function App() {
     const tier = Math.max(1, Number(customTier) || 1);
     const kind = customKind || "switch";
     const splitCount =
-      kind === "patch" ? Math.max(2, Math.min(64, Number(customSplit) || 8)) : undefined;
+      kind === "patch"
+        ? Math.max(
+            MIN_PATCH_SPLIT,
+            Math.min(MAX_PATCH_SPLIT, Number(customSplit) || DEFAULT_PATCH_SPLIT),
+          )
+        : undefined;
     const baseNodes = nodesRef.current;
     const baseIndex = baseNodes.filter((node) => node.data?.kind === kind).length;
     const stamp = Date.now();
@@ -1500,14 +1510,17 @@ export default function App() {
   };
 
   const selectionSplit = useMemo(() => {
-    if (!hasSelection || selectedType !== "node") return 2;
+    if (!hasSelection || selectedType !== "node") return MIN_PATCH_SPLIT;
     const node = nodes.find((n) => n.id === selectedId);
-    return node?.data?.splitCount ?? 2;
+    return node?.data?.splitCount ?? MIN_PATCH_SPLIT;
   }, [hasSelection, nodes, selectedId, selectedType]);
 
   const updateSplit = (value) => {
     if (!hasSelection || selectedType !== "node") return;
-    const next = Math.max(2, Math.min(64, Number(value) || 2));
+    const next = Math.max(
+      MIN_PATCH_SPLIT,
+      Math.min(MAX_PATCH_SPLIT, Number(value) || MIN_PATCH_SPLIT),
+    );
     setNodes((nds) =>
       nds.map((n) =>
         n.id === selectedId
