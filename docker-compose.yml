@@ -6,9 +6,10 @@ services:
       - "8000:8000"
     volumes:
       - ./backend/app:/app/app
-      - ./backend/topology.db:/app/topology.db
+      - ./backend/data:/app/data
     environment:
       - PYTHONUNBUFFERED=1
+      - DATABASE_URL=sqlite:////app/data/topology.db
 
   frontend:
     build:

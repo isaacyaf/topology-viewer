@@ -72,5 +72,5 @@ Legacy single-topology endpoints (still supported):
 
 ## Notes
 
-- Data stored in `backend/topology.db` (SQLite).
-- If you have an existing DB from older versions, delete `backend/topology.db` to pick up new columns.
+- Data stored in `backend/data/topology.db` (SQLite) when running via Docker Compose.
+- If you have an existing DB from older versions, delete `backend/data/topology.db` to pick up new columns.
