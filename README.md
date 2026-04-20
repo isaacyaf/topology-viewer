@@ -60,6 +60,8 @@ For local dev, it defaults to `http://127.0.0.1:8000`.
 
 ## API
 
+Full API usage guide: [docs/API.md](/mnt/d/CodeX/topology_view/docs/API.md)
+
 - `GET /api/topologies` list topologies
 - `POST /api/topologies` create topology
 - `GET /api/topologies/{id}` get topology
@@ -71,6 +73,37 @@ Legacy single-topology endpoints (still supported):
 
 - `GET /api/topology`
 - `PUT /api/topology`
+
+### Agent-Friendly Graph APIs
+
+These endpoints let an AI agent modify the topology without replacing the whole JSON document each time.
+
+- `GET /api/meta` list supported node kinds, topology types, arrange modes, handles, and patch panel limits
+- `POST /api/topologies/{id}/nodes` add one node
+- `POST /api/topologies/{id}/nodes/batch` batch-add nodes, optionally auto-connecting them to the nearest lower tier
+- `PATCH /api/topologies/{id}/nodes/{node_id}` update one node
+- `DELETE /api/topologies/{id}/nodes/{node_id}` delete one node and its connected edges
+- `POST /api/topologies/{id}/edges` add one edge
+- `PATCH /api/topologies/{id}/edges/{edge_id}` update one edge
+- `DELETE /api/topologies/{id}/edges/{edge_id}` delete one edge
+- `POST /api/topologies/{id}/layout` apply backend auto-layout
+- `POST /api/topologies/{id}/arrange` align or distribute a set of node IDs
+
+Example requests:
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/topologies/1/nodes \
+  -H 'Content-Type: application/json' \
+  -d '{"kind":"patch","tier":2,"splitCount":512}'
+
+curl -X POST http://127.0.0.1:8000/api/topologies/1/edges \
+  -H 'Content-Type: application/json' \
+  -d '{"source":"node-a","target":"node-b","label":"uplink"}'
+
+curl -X POST http://127.0.0.1:8000/api/topologies/1/layout \
+  -H 'Content-Type: application/json' \
+  -d '{"end_gap":true}'
+```
 
 ## Notes
 
