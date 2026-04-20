@@ -41,6 +41,8 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
+Local backend runs store SQLite data in `backend/data/topology.db` by default.
+
 ### Frontend
 
 ```bash
@@ -72,5 +74,5 @@ Legacy single-topology endpoints (still supported):
 
 ## Notes
 
-- Data stored in `backend/data/topology.db` (SQLite) when running via Docker Compose.
+- Data stored in `backend/data/topology.db` (SQLite) for local dev and Docker Compose.
 - If you have an existing DB from older versions, delete `backend/data/topology.db` to pick up new columns.

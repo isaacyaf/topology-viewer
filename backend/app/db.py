@@ -1,9 +1,11 @@
 import os
+from pathlib import Path
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-DEFAULT_DB_PATH = "/app/data/topology.db"
+BACKEND_DIR = Path(__file__).resolve().parents[1]
+DEFAULT_DB_PATH = BACKEND_DIR / "data" / "topology.db"
 DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{DEFAULT_DB_PATH}")
 
 if DATABASE_URL.startswith("sqlite:///"):
