@@ -65,6 +65,15 @@ import Inspector from "./components/Inspector/Inspector";
 
 const defaultViewport = { x: 0, y: 0, zoom: 1 };
 
+interface PersistedSnapshot {
+  activeId: number | null;
+  name: string;
+  topoType: TopologyType;
+  topoParams: TopologyParamsMap;
+  nodes: AppNode[];
+  edges: AppEdge[];
+}
+
 const NON_TREE_TYPES = new Set<TopologyType>([
   "torus-2d",
   "torus-3d",
@@ -368,16 +377,19 @@ export default function App() {
   // Sidebar state
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(true);
   const [expandedSections, setExpandedSections] = useState<Set<SidebarSectionId>>(
-    new Set(["topology"])
+    new Set(["topology", "generator"])
   );
 
   const statusTimerRef = useRef<number | null>(null);
+  const autosavePausedRef = useRef<boolean>(true);
+  const lastPersistedRef = useRef<PersistedSnapshot | null>(null);
   const historyRef = useRef<HistoryState>({ past: [], future: [] });
   const suppressHistoryRef = useRef<boolean>(false);
   const clipboardRef = useRef<{ nodes: AppNode[]; edges: AppEdge[] } | null>(null);
   const pasteCountRef = useRef<number>(0);
   const reactFlowInstanceRef = useRef<ReactFlowInstance | null>(null);
   const reactFlowWrapperRef = useRef<HTMLDivElement | null>(null);
+  const activeIdRef = useRef<number | null>(null);
   const nodesRef = useRef<AppNode[]>([]);
   const edgesRef = useRef<AppEdge[]>([]);
 
@@ -407,6 +419,10 @@ export default function App() {
     edgesRef.current = edges;
   }, [edges]);
 
+  useEffect(() => {
+    activeIdRef.current = activeId;
+  }, [activeId]);
+
   const selectedType = selected?.type;
   const selectedId = selected?.id;
 
@@ -426,6 +442,33 @@ export default function App() {
         type: node.data?.layout === "grid" ? "custom-grid" : "custom-tree",
       })),
     [nodes],
+  );
+
+  const snapshotsEqual = useCallback(
+    (left: PersistedSnapshot | null, right: PersistedSnapshot | null): boolean => {
+      if (!left || !right) return false;
+      return (
+        left.activeId === right.activeId &&
+        left.name === right.name &&
+        left.topoType === right.topoType &&
+        JSON.stringify(left.topoParams) === JSON.stringify(right.topoParams) &&
+        JSON.stringify(left.nodes) === JSON.stringify(right.nodes) &&
+        JSON.stringify(left.edges) === JSON.stringify(right.edges)
+      );
+    },
+    [],
+  );
+
+  const capturePersistedSnapshot = useCallback(
+    (override: Partial<PersistedSnapshot> = {}): PersistedSnapshot => ({
+      activeId: override.activeId ?? activeId,
+      name: override.name ?? name,
+      topoType: override.topoType ?? topoType,
+      topoParams: override.topoParams ?? topoParams,
+      nodes: override.nodes ?? nodes,
+      edges: override.edges ?? edges,
+    }),
+    [activeId, edges, name, nodes, topoParams, topoType],
   );
 
   // Sidebar section toggle
@@ -457,7 +500,7 @@ export default function App() {
     if (savedState) {
       try {
         const { open, sections } = JSON.parse(savedState);
-        const validSections: SidebarSectionId[] = ["topology", "edit", "arrange", "view"];
+        const validSections: SidebarSectionId[] = ["topology", "generator", "edit", "arrange", "view"];
         setSidebarOpen(open);
         setExpandedSections(
           new Set((sections || []).filter((section: SidebarSectionId) => validSections.includes(section))),
@@ -690,6 +733,7 @@ export default function App() {
   const loadTopology = useCallback(
     async (id: number | null): Promise<void> => {
       if (!id) return;
+      autosavePausedRef.current = true;
       setStatus("loading");
       try {
         const res = await fetch(`/api/topologies/${id}`);
@@ -707,29 +751,37 @@ export default function App() {
             layout: node.data?.layout || (isNonTree ? "grid" : "tree"),
           },
         }));
-        if (data.topo_type && data.topo_type !== "custom") {
-          setNodes(
-            computeLayoutNodes(
-              withLayout,
-              nextEdges,
-              data.topo_type,
-              data.topo_params,
-            ),
-          );
-        } else {
-          setNodes(withLayout);
-        }
+        const nextLayoutNodes =
+          data.topo_type && data.topo_type !== "custom"
+            ? computeLayoutNodes(
+                withLayout,
+                nextEdges,
+                data.topo_type,
+                data.topo_params,
+              )
+            : withLayout;
+        setNodes(nextLayoutNodes);
         setEdges(nextEdges);
         setSelected(null);
+        lastPersistedRef.current = capturePersistedSnapshot({
+          activeId: id,
+          name: data.name || t("Default"),
+          topoType: data.topo_type || "custom",
+          topoParams: data.topo_params || {},
+          nodes: nextLayoutNodes,
+          edges: nextEdges,
+        });
+        autosavePausedRef.current = false;
         setStatus("ready");
         setLastSaved(new Date());
         historyRef.current = { past: [], future: [] };
       } catch (err) {
         console.error(err);
+        autosavePausedRef.current = false;
         setStatus("error");
       }
     },
-    [computeLayoutNodes, normalizeEdges, setEdges, setNodes, t],
+    [capturePersistedSnapshot, computeLayoutNodes, normalizeEdges, setEdges, setNodes, t],
   );
 
   const loadTopologies = useCallback(async (): Promise<void> => {
@@ -744,22 +796,29 @@ export default function App() {
         throw new Error("Invalid topology list payload");
       }
       setTopologies(data);
-      const nextId = data?.[0]?.id;
+      const currentActiveId = activeIdRef.current;
+      const nextId =
+        data.find((item) => item.id === currentActiveId)?.id ?? data?.[0]?.id;
       if (nextId) {
-        setActiveId(nextId);
+        if (currentActiveId !== nextId) {
+          setActiveId(nextId);
+        }
         await loadTopology(nextId);
       } else {
+        lastPersistedRef.current = null;
+        autosavePausedRef.current = false;
         setStatus("ready");
       }
     } catch (err) {
       console.error(err);
+      autosavePausedRef.current = false;
       setStatus("error");
     }
   }, [loadTopology]);
 
   useEffect(() => {
     loadTopologies();
-  }, [loadTopologies]);
+  }, []);
 
   const saveTopology = useCallback(async (): Promise<void> => {
     if (!activeId) return;
@@ -781,6 +840,7 @@ export default function App() {
         }),
       });
       if (!res.ok) throw new Error("Save failed");
+      lastPersistedRef.current = capturePersistedSnapshot();
       const savedAt = new Date();
       statusTimerRef.current = setTimeout(() => {
         setStatus("ready");
@@ -794,15 +854,29 @@ export default function App() {
       console.error(err);
       setStatus("error");
     }
-  }, [activeId, name, topoParams, topoType, nodes, edges]);
+  }, [activeId, capturePersistedSnapshot, name, topoParams, topoType, nodes, edges]);
 
   useEffect(() => {
-    if (status === "loading") return;
+    if (!activeId || autosavePausedRef.current) return;
+    if (status === "loading" || status === "saving") return;
+    const currentSnapshot = capturePersistedSnapshot();
+    if (snapshotsEqual(currentSnapshot, lastPersistedRef.current)) return;
     const handle = setTimeout(() => {
       saveTopology();
     }, 800);
     return () => clearTimeout(handle);
-  }, [name, nodes, edges, saveTopology, status]);
+  }, [
+    activeId,
+    capturePersistedSnapshot,
+    edges,
+    name,
+    nodes,
+    saveTopology,
+    snapshotsEqual,
+    status,
+    topoParams,
+    topoType,
+  ]);
 
   const onConnect = useCallback(
     (params: Connection) => setEdges((eds) => addEdge({ ...params, label: "link" }, eds)),
@@ -840,6 +914,7 @@ export default function App() {
   const createTopology = async () => {
     const nextName = window.prompt(t("Topology name"), t("Untitled"));
     if (!nextName) return;
+    autosavePausedRef.current = true;
     setStatus("loading");
     try {
       const res = await fetch("/api/topologies", {
@@ -860,12 +935,14 @@ export default function App() {
       await loadTopology(data.id);
     } catch (err) {
       console.error(err);
+      autosavePausedRef.current = false;
       setStatus("error");
     }
   };
 
   const deleteTopology = async () => {
     if (!activeId) return;
+    autosavePausedRef.current = true;
     const ok = window.confirm(t("Delete this topology?"));
     if (!ok) return;
     setStatus("loading");
@@ -882,6 +959,8 @@ export default function App() {
       if (nextId) {
         await loadTopology(nextId);
       } else {
+        lastPersistedRef.current = null;
+        autosavePausedRef.current = false;
         setName(t("Untitled"));
         setNodes([]);
         setEdges([]);
@@ -890,12 +969,14 @@ export default function App() {
       }
     } catch (err) {
       console.error(err);
+      autosavePausedRef.current = false;
       setStatus("error");
     }
   };
 
   const selectTopology = async (id: number): Promise<void> => {
     if (!id || id === activeId) return;
+    autosavePausedRef.current = true;
     setActiveId(id);
     await loadTopology(id);
   };
@@ -1114,6 +1195,7 @@ export default function App() {
 
   const generateTopology = async () => {
     if (!activeId) return;
+    autosavePausedRef.current = true;
     setStatus("loading");
     try {
       const res = await fetch(`/api/topologies/${activeId}/generate`, {
@@ -1136,20 +1218,29 @@ export default function App() {
         },
       }));
       const nextEdges = normalizeEdges(data.edges || []);
-      setNodes(
-        computeLayoutNodes(
-          withLayout,
-          nextEdges,
-          data.topo_type,
-          data.topo_params,
-        ),
+      const nextLayoutNodes = computeLayoutNodes(
+        withLayout,
+        nextEdges,
+        data.topo_type,
+        data.topo_params,
       );
+      setNodes(nextLayoutNodes);
       setEdges(nextEdges);
+      lastPersistedRef.current = capturePersistedSnapshot({
+        activeId,
+        name: data.name || t("Default"),
+        topoType: data.topo_type || "custom",
+        topoParams: data.topo_params || {},
+        nodes: nextLayoutNodes,
+        edges: nextEdges,
+      });
+      autosavePausedRef.current = false;
       setStatus("ready");
       setLastSaved(new Date());
       historyRef.current = { past: [], future: [] };
     } catch (err) {
       console.error(err);
+      autosavePausedRef.current = false;
       setStatus("error");
     }
   };
@@ -1556,8 +1647,8 @@ export default function App() {
       <Sidebar open={sidebarOpen} onToggle={() => setSidebarOpen(!sidebarOpen)} locale={locale} status={status} lastSaved={lastSaved}>
         <SidebarSection
           id="topology"
-          title="Topology"
-          titleZhTW="拓撲"
+          title="Workspace"
+          titleZhTW="工作區"
           icon="🧭"
           expanded={expandedSections.has("topology")}
           onToggle={() => toggleSection("topology")}
@@ -1580,9 +1671,24 @@ export default function App() {
                 onDeleteTopology={deleteTopology}
                 onLoadFromJson={loadFromJson}
                 onExportJson={exportJson}
+                onAutoLayout={autoLayout}
               />
             </div>
+          </div>
+        </SidebarSection>
 
+        <SidebarSection
+          id="generator"
+          title="Generator"
+          titleZhTW="產生器"
+          icon="⚙️"
+          expanded={expandedSections.has("generator")}
+          onToggle={() => toggleSection("generator")}
+          locale={locale}
+          sidebarOpen={sidebarOpen}
+          onSidebarToggle={() => setSidebarOpen(true)}
+        >
+          <div className="section-stack">
             <div className="section-group">
               <div className="section-group-title">{locale === "zh-TW" ? "產生器" : "Generator"}</div>
               <GeneratorSection

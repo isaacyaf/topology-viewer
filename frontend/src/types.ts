@@ -370,6 +370,7 @@ export type DefaultTierMap = Record<NodeKind, number>;
  */
 export type SidebarSectionId =
   | "topology"
+  | "generator"
   | "edit"
   | "arrange"
   | "view";

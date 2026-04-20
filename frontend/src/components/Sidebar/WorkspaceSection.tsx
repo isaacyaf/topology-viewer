@@ -12,6 +12,7 @@ interface WorkspaceSectionProps {
   onDeleteTopology: () => void;
   onLoadFromJson: (event: React.ChangeEvent<HTMLInputElement>) => void;
   onExportJson: () => void;
+  onAutoLayout: () => void;
 }
 
 export default function WorkspaceSection({
@@ -26,6 +27,7 @@ export default function WorkspaceSection({
   onDeleteTopology,
   onLoadFromJson,
   onExportJson,
+  onAutoLayout,
 }: WorkspaceSectionProps) {
   const t = (en: string, zhTW: string) => (locale === "zh-TW" ? zhTW : en);
 
@@ -65,6 +67,10 @@ export default function WorkspaceSection({
           {t("Save", "儲存")}
         </button>
       </div>
+
+      <button className="btn ghost" onClick={onAutoLayout} style={{ width: "100%" }}>
+        {t("Auto Layout", "自動布局")}
+      </button>
 
       <div className="subsection">
         <div className="subsection-title">{t("Import / Export", "匯入 / 匯出")}</div>
