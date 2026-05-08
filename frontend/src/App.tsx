@@ -393,6 +393,29 @@ export default function App() {
   const nodesRef = useRef<AppNode[]>([]);
   const edgesRef = useRef<AppEdge[]>([]);
 
+  const makeRandomIdBase = useCallback((prefix: string): string => {
+    return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  }, []);
+
+  const makeUniqueId = useCallback(
+    (
+      base: string,
+      existingIds: Iterable<string>,
+      reservedIds: Set<string> = new Set(),
+    ): string => {
+      const existing = new Set(existingIds);
+      let candidate = base;
+      let index = 1;
+      while (existing.has(candidate) || reservedIds.has(candidate)) {
+        candidate = `${base}-${index}`;
+        index += 1;
+      }
+      reservedIds.add(candidate);
+      return candidate;
+    },
+    [],
+  );
+
   const t = useCallback<TranslationFunction>(
     (text, vars) => {
       const table = TRANSLATIONS[locale] || {};
@@ -737,6 +760,9 @@ export default function App() {
       setStatus("loading");
       try {
         const res = await fetch(`/api/topologies/${id}`);
+        if (!res.ok) {
+          throw new Error(`Failed to load topology ${id}: ${res.status}`);
+        }
         const data: TopologyResponse = await res.json();
         setName(data.name || t("Default"));
         setTopoType(data.topo_type || "custom");
@@ -879,26 +905,38 @@ export default function App() {
   ]);
 
   const onConnect = useCallback(
-    (params: Connection) => setEdges((eds) => addEdge({ ...params, label: "link" }, eds)),
-    [setEdges],
+    (params: Connection) =>
+      setEdges((eds) =>
+        addEdge(
+          {
+            ...params,
+            id: makeUniqueId(makeRandomIdBase("edge"), eds.map((edge) => edge.id)),
+            label: "link",
+          },
+          eds,
+        ),
+      ),
+    [makeRandomIdBase, makeUniqueId, setEdges],
   );
 
   const addNode = (kind: NodeKind = "rack"): void => {
-    const id = `node-${Date.now()}`;
-    const config = KIND_CONFIG[kind] || KIND_CONFIG.rack;
-    const next: AppNode = {
-      id,
-      type: "custom",
-      position: { x: 100 + nodes.length * 40, y: 100 + nodes.length * 30 },
-      data: {
-        label: `${config.label} ${nodes.length + 1}`,
-        kind,
-        tier: DEFAULT_TIER[kind],
-        splitCount: kind === "patch" ? 8 : undefined,
-        layout: "tree",
-      },
-    };
-    setNodes((nds) => nds.concat(next));
+    setNodes((nds) => {
+      const id = makeUniqueId(makeRandomIdBase("node"), nds.map((node) => node.id));
+      const config = KIND_CONFIG[kind] || KIND_CONFIG.rack;
+      const next: AppNode = {
+        id,
+        type: "custom",
+        position: { x: 100 + nds.length * 40, y: 100 + nds.length * 30 },
+        data: {
+          label: `${config.label} ${nds.length + 1}`,
+          kind,
+          tier: DEFAULT_TIER[kind],
+          splitCount: kind === "patch" ? 8 : undefined,
+          layout: "tree",
+        },
+      };
+      return nds.concat(next);
+    });
   };
 
   const refreshTopologies = useCallback(async () => {
@@ -942,9 +980,9 @@ export default function App() {
 
   const deleteTopology = async () => {
     if (!activeId) return;
-    autosavePausedRef.current = true;
     const ok = window.confirm(t("Delete this topology?"));
     if (!ok) return;
+    autosavePausedRef.current = true;
     setStatus("loading");
     try {
       const res = await fetch(`/api/topologies/${activeId}`, {
@@ -1018,21 +1056,29 @@ export default function App() {
             Math.min(MAX_PATCH_SPLIT, Number(splitCount) || DEFAULT_PATCH_SPLIT),
           )
         : undefined;
-    for (let i = 0; i < count; i++) {
-      const id = `${kind}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-      const newNode: AppNode = {
-        id,
-        type: "custom-tree",
-        position: { x: 200 + i * 20, y: 200 + i * 20 },
-        data: {
-          label: `${kind.charAt(0).toUpperCase() + kind.slice(1)} ${nodes.length + i + 1}`,
-          kind,
-          tier,
-          splitCount: resolvedSplit,
-        },
-      };
-      setNodes((nds) => [...nds, newNode]);
-    }
+    setNodes((nds) => {
+      const reserved = new Set<string>();
+      const nextNodes: AppNode[] = [];
+      for (let i = 0; i < count; i++) {
+        const id = makeUniqueId(
+          makeRandomIdBase(kind),
+          nds.map((node) => node.id),
+          reserved,
+        );
+        nextNodes.push({
+          id,
+          type: "custom-tree",
+          position: { x: 200 + i * 20, y: 200 + i * 20 },
+          data: {
+            label: `${kind.charAt(0).toUpperCase() + kind.slice(1)} ${nds.length + i + 1}`,
+            kind,
+            tier,
+            splitCount: resolvedSplit,
+          },
+        });
+      }
+      return nds.concat(nextNodes);
+    });
   };
 
   const addCustomBatch = (): void => {
@@ -1050,9 +1096,14 @@ export default function App() {
     const baseIndex = baseNodes.filter((node) => node.data?.kind === kind).length;
     const stamp = Date.now();
     const nextNodes: AppNode[] = [];
+    const reservedNodeIds = new Set<string>();
 
     for (let i = 0; i < count; i += 1) {
-      const id = `node-${stamp}-${i}`;
+      const id = makeUniqueId(
+        `node-${stamp}-${i}`,
+        baseNodes.map((node) => node.id),
+        reservedNodeIds,
+      );
       nextNodes.push({
         id,
         type: "custom",
@@ -1084,10 +1135,15 @@ export default function App() {
     if (!lowerNodes.length) return;
 
     const newEdges: AppEdge[] = [];
+    const reservedEdgeIds = new Set<string>();
     for (const newNode of nextNodes) {
       for (const target of lowerNodes) {
         newEdges.push({
-          id: `e-custom-${newNode.id}-${target.id}`,
+          id: makeUniqueId(
+            `e-custom-${newNode.id}-${target.id}`,
+            edgesRef.current.map((edge) => edge.id),
+            reservedEdgeIds,
+          ),
           source: newNode.id,
           target: target.id,
           sourceHandle: "bottom-out",
@@ -1469,9 +1525,15 @@ export default function App() {
     pasteCountRef.current += 1;
     const offset = 40 * pasteCountRef.current;
     const idMap = new Map<string, string>();
+    const reservedNodeIds = new Set<string>();
+    const reservedEdgeIds = new Set<string>();
 
     const pastedNodes = clipboard.nodes.map((node, index) => {
-      const nextId = `${node.id}-copy-${Date.now()}-${index}`;
+      const nextId = makeUniqueId(
+        `${node.id}-copy-${Date.now()}-${index}`,
+        nodesRef.current.map((existingNode) => existingNode.id),
+        reservedNodeIds,
+      );
       idMap.set(node.id, nextId);
       return {
         ...node,
@@ -1489,7 +1551,11 @@ export default function App() {
       .filter((edge) => idMap.has(edge.source) && idMap.has(edge.target))
       .map((edge, index) => ({
         ...edge,
-        id: `${edge.id}-copy-${Date.now()}-${index}`,
+        id: makeUniqueId(
+          `${edge.id}-copy-${Date.now()}-${index}`,
+          edgesRef.current.map((existingEdge) => existingEdge.id),
+          reservedEdgeIds,
+        ),
         source: idMap.get(edge.source)!,
         target: idMap.get(edge.target)!,
         selected: true,
@@ -1508,7 +1574,7 @@ export default function App() {
     setSelectedNodeIds(pastedNodes.map((node) => node.id));
     setSelectedEdgeIds(pastedEdges.map((edge) => edge.id));
     setSelected({ type: "node", id: pastedNodes[0]!.id });
-  }, [setEdges, setNodes]);
+  }, [makeUniqueId, setEdges, setNodes]);
 
   useEffect(() => {
     const handle = setTimeout(() => {

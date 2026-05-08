@@ -108,6 +108,31 @@ def normalize_edges(edges: list[dict]) -> list[dict]:
     return normalized
 
 
+def validate_topology_graph(nodes: list[dict], edges: list[dict]) -> None:
+    node_ids: set[str] = set()
+    for node in nodes:
+        node_id = node.get("id")
+        if not isinstance(node_id, str) or not node_id:
+            raise ValueError("Node id is required")
+        if node_id in node_ids:
+            raise ValueError(f"Duplicate node id: {node_id}")
+        node_ids.add(node_id)
+
+    edge_ids: set[str] = set()
+    for edge in edges:
+        edge_id = edge.get("id")
+        if not isinstance(edge_id, str) or not edge_id:
+            raise ValueError("Edge id is required")
+        if edge_id in edge_ids:
+            raise ValueError(f"Duplicate edge id: {edge_id}")
+        edge_ids.add(edge_id)
+
+        source = edge.get("source")
+        target = edge.get("target")
+        if source not in node_ids or target not in node_ids:
+            raise ValueError(f"Edge {edge_id} source/target must reference existing nodes")
+
+
 def _node_label(kind: str, index: int) -> str:
     return f"{KIND_LABEL.get(kind, kind)} {index}"
 
@@ -142,8 +167,12 @@ def build_node(
     kind = kind or "rack"
     tier = int(tier or DEFAULT_TIER.get(kind, DEFAULT_TIER["server"]))
     same_kind_count = sum(1 for node in existing_nodes if (node.get("data") or {}).get("kind") == kind)
+    existing_node_ids = {node.get("id") for node in existing_nodes}
+    resolved_node_id = node_id or f"node-{uuid4().hex[:12]}"
+    while not node_id and resolved_node_id in existing_node_ids:
+        resolved_node_id = f"node-{uuid4().hex[:12]}"
     next_node = {
-        "id": node_id or f"node-{uuid4().hex[:12]}",
+        "id": resolved_node_id,
         "type": "custom",
         "position": position or {"x": 100 + len(existing_nodes) * 40, "y": 100 + len(existing_nodes) * 30},
         "data": {
@@ -166,9 +195,14 @@ def build_edge(
     edge_id: str | None = None,
     source_handle: str | None = None,
     target_handle: str | None = None,
+    existing_edges: list[dict] | None = None,
 ) -> dict:
+    existing_edge_ids = {edge.get("id") for edge in existing_edges or []}
+    resolved_edge_id = edge_id or f"edge-{uuid4().hex[:12]}"
+    while not edge_id and resolved_edge_id in existing_edge_ids:
+        resolved_edge_id = f"edge-{uuid4().hex[:12]}"
     edge = {
-        "id": edge_id or f"edge-{uuid4().hex[:12]}",
+        "id": resolved_edge_id,
         "source": source,
         "target": target,
         "sourceHandle": normalize_handle(source_handle, "source"),

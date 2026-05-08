@@ -39,6 +39,7 @@ from .topology_ops import (
     clamp_patch_split,
     read_topology_graph,
     topology_to_response,
+    validate_topology_graph,
     write_topology_graph,
 )
 from .topology_generators import (
@@ -88,6 +89,13 @@ def commit_topology(db: Session, topology):
     db.commit()
     db.refresh(topology)
     return topology_to_response(topology)
+
+
+def validate_payload_graph_or_400(payload: TopologyPayload):
+    try:
+        validate_topology_graph(payload.nodes, payload.edges)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @app.get("/api/health")
@@ -150,6 +158,7 @@ def read_topology(db: Session = Depends(get_db)):
 
 @app.put("/api/topology", response_model=TopologyResponse)
 def write_topology(payload: TopologyPayload, db: Session = Depends(get_db)):
+    validate_payload_graph_or_400(payload)
     topology = get_or_create_default(db)
     topology = update_topology(db, topology, payload)
     return topology_to_response(topology)
@@ -163,6 +172,7 @@ def read_topologies(db: Session = Depends(get_db)):
 
 @app.post("/api/topologies", response_model=TopologyResponse)
 def create_topology_endpoint(payload: TopologyCreate, db: Session = Depends(get_db)):
+    validate_payload_graph_or_400(payload)
     topology = create_topology(db, payload)
     return topology_to_response(topology)
 
@@ -175,6 +185,7 @@ def read_topology_by_id(topology_id: int, db: Session = Depends(get_db)):
 
 @app.put("/api/topologies/{topology_id}", response_model=TopologyResponse)
 def write_topology_by_id(topology_id: int, payload: TopologyPayload, db: Session = Depends(get_db)):
+    validate_payload_graph_or_400(payload)
     topology = get_topology_or_404(db, topology_id)
     topology = update_topology(db, topology, payload)
     return topology_to_response(topology)
@@ -284,6 +295,11 @@ def generate_topology(topology_id: int, payload: GenerateTopologyRequest, db: Se
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
+    try:
+        validate_topology_graph(result.nodes, result.edges)
+    except ValueError as exc:
+        raise HTTPException(status_code=500, detail=f"Generated topology is invalid: {exc}") from exc
+
     topology.name = payload.name or topology.name
     write_topology_graph(
         topology,
@@ -299,6 +315,8 @@ def generate_topology(topology_id: int, payload: GenerateTopologyRequest, db: Se
 def create_node_endpoint(topology_id: int, payload: NodeCreate, db: Session = Depends(get_db)):
     topology = get_topology_or_404(db, topology_id)
     topo_params, nodes, edges = read_topology_graph(topology)
+    if payload.id and any(node["id"] == payload.id for node in nodes):
+        raise HTTPException(status_code=400, detail="Node id already exists")
     nodes.append(
         build_node(
             existing_nodes=nodes,
@@ -354,6 +372,7 @@ def create_nodes_batch(topology_id: int, payload: BatchNodeCreate, db: Session =
                             target=lower_node["id"],
                             label=topo_params.get("edge_label", "link"),
                             edge_id=f"e-custom-{new_node['id']}-{lower_node['id']}",
+                            existing_edges=edges,
                         )
                     )
 
@@ -411,6 +430,8 @@ def create_edge_endpoint(topology_id: int, payload: EdgeCreate, db: Session = De
     node_ids = {node["id"] for node in nodes}
     if payload.source not in node_ids or payload.target not in node_ids:
         raise HTTPException(status_code=400, detail="Edge source/target must reference existing nodes")
+    if payload.id and any(edge["id"] == payload.id for edge in edges):
+        raise HTTPException(status_code=400, detail="Edge id already exists")
     edges.append(
         build_edge(
             source=payload.source,
@@ -419,6 +440,7 @@ def create_edge_endpoint(topology_id: int, payload: EdgeCreate, db: Session = De
             edge_id=payload.id,
             source_handle=payload.sourceHandle,
             target_handle=payload.targetHandle,
+            existing_edges=edges,
         )
     )
     write_topology_graph(topology, topo_params=topo_params, nodes=nodes, edges=edges)
