@@ -124,6 +124,7 @@ const TRANSLATIONS: Record<Locale, Record<string, string>> = {
     "Auto Layout (High → Low)": "自動佈局（高 → 低）",
     "Topology Generator": "拓撲產生器",
     Custom: "自訂",
+    "Layered Custom": "分層自訂",
     "Leaf-Spine": "Leaf-Spine",
     "Fat-Tree": "Fat-Tree",
     "3-Tier": "三層式",

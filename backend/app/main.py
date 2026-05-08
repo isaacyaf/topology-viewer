@@ -17,6 +17,7 @@ from .schemas import (
     BatchNodeCreate,
     EdgeCreate,
     EdgeUpdate,
+    GenerateLayersRequest,
     GenerateTopologyRequest,
     LayoutRequest,
     NodeCreate,
@@ -43,11 +44,13 @@ from .topology_ops import (
     write_topology_graph,
 )
 from .topology_generators import (
+    GeneratedTopology,
     generate_butterfly,
     generate_core_and_pod,
     generate_dragonfly,
     generate_expanded_clos,
     generate_fat_tree,
+    generate_layered_custom,
     generate_leaf_spine,
     generate_mesh,
     generate_ring,
@@ -98,6 +101,166 @@ def validate_payload_graph_or_400(payload: TopologyPayload):
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
+def build_generated_topology(payload: GenerateTopologyRequest) -> GeneratedTopology:
+    topo_type = payload.topo_type
+    params = payload.params or {}
+    edge_label = params.get("edge_label", "link")
+    if topo_type == "leaf-spine":
+        return generate_leaf_spine(
+            params.get("spines", 2),
+            params.get("leaves", 4),
+            params.get("spine_kind", "switch"),
+            params.get("leaf_kind", "switch"),
+            edge_label,
+        )
+    if topo_type == "fat-tree":
+        return generate_fat_tree(
+            params.get("k", 4),
+            params.get("core_kind", "switch"),
+            params.get("agg_kind", "switch"),
+            params.get("edge_kind", "switch"),
+            edge_label,
+        )
+    if topo_type == "three-tier":
+        return generate_three_tier(
+            params.get("core", 2),
+            params.get("aggregation", 4),
+            params.get("access", 6),
+            params.get("core_kind", "switch"),
+            params.get("agg_kind", "switch"),
+            params.get("access_kind", "switch"),
+            edge_label,
+        )
+    if topo_type == "expanded-clos":
+        return generate_expanded_clos(
+            params.get("tiers", 4),
+            params.get("nodes_per_tier", 4),
+            params.get("kind", "switch"),
+            edge_label,
+        )
+    if topo_type == "core-and-pod":
+        return generate_core_and_pod(
+            params.get("cores", 2),
+            params.get("pods", 2),
+            params.get("pod_leaves", 4),
+            params.get("pod_aggs", 2),
+            params.get("core_kind", "switch"),
+            params.get("agg_kind", "switch"),
+            params.get("leaf_kind", "switch"),
+            edge_label,
+        )
+    if topo_type == "torus-2d":
+        return generate_torus_2d(
+            params.get("rows", 3),
+            params.get("cols", 3),
+            params.get("kind", "switch"),
+            edge_label,
+        )
+    if topo_type == "torus-3d":
+        return generate_torus_3d(
+            params.get("x", 3),
+            params.get("y", 3),
+            params.get("z", 3),
+            params.get("kind", "switch"),
+            edge_label,
+        )
+    if topo_type == "dragonfly":
+        return generate_dragonfly(
+            params.get("groups", 3),
+            params.get("routers_per_group", 4),
+            params.get("kind", "switch"),
+            edge_label,
+        )
+    if topo_type == "butterfly":
+        return generate_butterfly(
+            params.get("stages", 4),
+            params.get("width", 4),
+            params.get("kind", "switch"),
+            edge_label,
+        )
+    if topo_type == "mesh":
+        return generate_mesh(
+            params.get("rows", 3),
+            params.get("cols", 3),
+            params.get("kind", "switch"),
+            edge_label,
+        )
+    if topo_type == "ring":
+        return generate_ring(params.get("count", 6), params.get("kind", "switch"), edge_label)
+    if topo_type == "star":
+        return generate_star(params.get("count", 6), params.get("kind", "switch"), edge_label)
+    raise ValueError("Unsupported topology type")
+
+
+def build_generated_layers(payload: GenerateLayersRequest) -> GeneratedTopology:
+    return generate_layered_custom(
+        [layer.model_dump(exclude_none=True) for layer in payload.layers],
+        edge_label=payload.edge_label,
+        connection_mode=payload.connection_mode,
+        layout=payload.layout,
+        layer_gap=payload.layer_gap,
+        node_spacing_x=payload.node_spacing_x,
+    )
+
+
+def validate_generated_result_or_400(result: GeneratedTopology):
+    try:
+        validate_topology_graph(result.nodes, result.edges)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=f"Generated topology is invalid: {exc}") from exc
+
+
+def create_topology_from_generated_result(db: Session, name: str | None, result: GeneratedTopology):
+    validate_generated_result_or_400(result)
+    payload = TopologyCreate(
+        name=name or "Generated Topology",
+        topo_type=result.topo_type,
+        topo_params=result.params,
+        nodes=result.nodes,
+        edges=result.edges,
+    )
+    return create_topology(db, payload)
+
+
+def apply_generated_result_to_topology(db: Session, topology, name: str | None, result: GeneratedTopology):
+    validate_generated_result_or_400(result)
+    topology.name = name or topology.name
+    write_topology_graph(
+        topology,
+        topo_type=result.topo_type,
+        topo_params=result.params,
+        nodes=result.nodes,
+        edges=result.edges,
+    )
+    return commit_topology(db, topology)
+
+
+def create_topology_from_layer_result(db: Session, payload: GenerateLayersRequest, result: GeneratedTopology):
+    validate_generated_result_or_400(result)
+    nodes = apply_auto_layout(result.nodes, result.edges, result.topo_type, result.params)
+    create_payload = TopologyCreate(
+        name=payload.name or "Generated Layered Topology",
+        topo_type=payload.topo_type or result.topo_type,
+        topo_params=result.params,
+        nodes=nodes,
+        edges=result.edges,
+    )
+    return create_topology(db, create_payload)
+
+
+def apply_layer_result_to_topology(db: Session, topology, payload: GenerateLayersRequest, result: GeneratedTopology):
+    validate_generated_result_or_400(result)
+    topology.name = payload.name or topology.name
+    write_topology_graph(
+        topology,
+        topo_type=payload.topo_type or result.topo_type,
+        topo_params=result.params,
+        nodes=apply_auto_layout(result.nodes, result.edges, result.topo_type, result.params),
+        edges=result.edges,
+    )
+    return commit_topology(db, topology)
+
+
 @app.get("/api/health")
 def health():
     return {"status": "ok"}
@@ -116,6 +279,7 @@ def read_api_meta():
         },
         "topology_types": [
             "custom",
+            "layered-custom",
             "leaf-spine",
             "fat-tree",
             "three-tier",
@@ -198,117 +362,44 @@ def delete_topology_by_id(topology_id: int, db: Session = Depends(get_db)):
     return {"status": "deleted"}
 
 
+@app.post("/api/topologies/generate", response_model=TopologyResponse)
+def create_generated_topology(payload: GenerateTopologyRequest, db: Session = Depends(get_db)):
+    try:
+        result = build_generated_topology(payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    topology = create_topology_from_generated_result(db, payload.name, result)
+    return topology_to_response(topology)
+
+
 @app.post("/api/topologies/{topology_id}/generate", response_model=TopologyResponse)
 def generate_topology(topology_id: int, payload: GenerateTopologyRequest, db: Session = Depends(get_db)):
     topology = get_topology_or_404(db, topology_id)
-
-    topo_type = payload.topo_type
-    params = payload.params or {}
-    edge_label = params.get("edge_label", "link")
     try:
-        if topo_type == "leaf-spine":
-            result = generate_leaf_spine(
-                params.get("spines", 2),
-                params.get("leaves", 4),
-                params.get("spine_kind", "switch"),
-                params.get("leaf_kind", "switch"),
-                edge_label,
-            )
-        elif topo_type == "fat-tree":
-            result = generate_fat_tree(
-                params.get("k", 4),
-                params.get("core_kind", "switch"),
-                params.get("agg_kind", "switch"),
-                params.get("edge_kind", "switch"),
-                edge_label,
-            )
-        elif topo_type == "three-tier":
-            result = generate_three_tier(
-                params.get("core", 2),
-                params.get("aggregation", 4),
-                params.get("access", 6),
-                params.get("core_kind", "switch"),
-                params.get("agg_kind", "switch"),
-                params.get("access_kind", "switch"),
-                edge_label,
-            )
-        elif topo_type == "expanded-clos":
-            result = generate_expanded_clos(
-                params.get("tiers", 4),
-                params.get("nodes_per_tier", 4),
-                params.get("kind", "switch"),
-                edge_label,
-            )
-        elif topo_type == "core-and-pod":
-            result = generate_core_and_pod(
-                params.get("cores", 2),
-                params.get("pods", 2),
-                params.get("pod_leaves", 4),
-                params.get("pod_aggs", 2),
-                params.get("core_kind", "switch"),
-                params.get("agg_kind", "switch"),
-                params.get("leaf_kind", "switch"),
-                edge_label,
-            )
-        elif topo_type == "torus-2d":
-            result = generate_torus_2d(
-                params.get("rows", 3),
-                params.get("cols", 3),
-                params.get("kind", "switch"),
-                edge_label,
-            )
-        elif topo_type == "torus-3d":
-            result = generate_torus_3d(
-                params.get("x", 3),
-                params.get("y", 3),
-                params.get("z", 3),
-                params.get("kind", "switch"),
-                edge_label,
-            )
-        elif topo_type == "dragonfly":
-            result = generate_dragonfly(
-                params.get("groups", 3),
-                params.get("routers_per_group", 4),
-                params.get("kind", "switch"),
-                edge_label,
-            )
-        elif topo_type == "butterfly":
-            result = generate_butterfly(
-                params.get("stages", 4),
-                params.get("width", 4),
-                params.get("kind", "switch"),
-                edge_label,
-            )
-        elif topo_type == "mesh":
-            result = generate_mesh(
-                params.get("rows", 3),
-                params.get("cols", 3),
-                params.get("kind", "switch"),
-                edge_label,
-            )
-        elif topo_type == "ring":
-            result = generate_ring(params.get("count", 6), params.get("kind", "switch"), edge_label)
-        elif topo_type == "star":
-            result = generate_star(params.get("count", 6), params.get("kind", "switch"), edge_label)
-        else:
-            raise HTTPException(status_code=400, detail="Unsupported topology type")
+        result = build_generated_topology(payload)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return apply_generated_result_to_topology(db, topology, payload.name, result)
 
+
+@app.post("/api/topologies/generate/layers", response_model=TopologyResponse)
+def create_generated_topology_from_layers(payload: GenerateLayersRequest, db: Session = Depends(get_db)):
     try:
-        validate_topology_graph(result.nodes, result.edges)
+        result = build_generated_layers(payload)
     except ValueError as exc:
-        raise HTTPException(status_code=500, detail=f"Generated topology is invalid: {exc}") from exc
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    topology = create_topology_from_layer_result(db, payload, result)
+    return topology_to_response(topology)
 
-    topology.name = payload.name or topology.name
-    write_topology_graph(
-        topology,
-        topo_type=result.topo_type,
-        topo_params=result.params,
-        nodes=result.nodes,
-        edges=result.edges,
-    )
-    return commit_topology(db, topology)
+
+@app.post("/api/topologies/{topology_id}/generate/layers", response_model=TopologyResponse)
+def generate_topology_from_layers(topology_id: int, payload: GenerateLayersRequest, db: Session = Depends(get_db)):
+    topology = get_topology_or_404(db, topology_id)
+    try:
+        result = build_generated_layers(payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return apply_layer_result_to_topology(db, topology, payload, result)
 
 
 @app.post("/api/topologies/{topology_id}/nodes", response_model=TopologyResponse)

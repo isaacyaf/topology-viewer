@@ -114,6 +114,28 @@ class GenerateTopologyRequest(BaseModel):
     name: str | None = None
 
 
+class GeneratorLayer(BaseModel):
+    id: str | None = None
+    label: str | None = None
+    kind: Literal["rack", "switch", "server", "asic", "patch"] = "switch"
+    tier: int
+    count: int = 1
+    label_prefix: str | None = None
+    splitCount: int | None = None
+    layout: Literal["tree", "grid"] | None = None
+
+
+class GenerateLayersRequest(BaseModel):
+    name: str | None = None
+    topo_type: str = "layered-custom"
+    layers: list[GeneratorLayer] = Field(default_factory=list)
+    edge_label: str | None = "link"
+    connection_mode: Literal["full-mesh", "one-to-one", "none"] = "full-mesh"
+    layout: Literal["tree", "grid"] | None = None
+    layer_gap: int | None = None
+    node_spacing_x: int | None = None
+
+
 class LayoutRequest(BaseModel):
     end_gap: bool = False
 

@@ -67,7 +67,10 @@ Full API usage guide: [docs/API.md](/mnt/d/CodeX/topology_view/docs/API.md)
 - `GET /api/topologies/{id}` get topology
 - `PUT /api/topologies/{id}` update topology
 - `DELETE /api/topologies/{id}` delete topology
-- `POST /api/topologies/{id}/generate` generate Tier 1 topologies
+- `POST /api/topologies/generate` create topology from built-in generator
+- `POST /api/topologies/{id}/generate` generate built-in topologies
+- `POST /api/topologies/generate/layers` create topology from layered generator
+- `POST /api/topologies/{id}/generate/layers` generate a custom layered topology
 
 Legacy single-topology endpoints (still supported):
 

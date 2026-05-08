@@ -61,6 +61,7 @@ export type AppEdge = ReactFlowEdge;
  */
 export type TopologyType =
   | "custom"
+  | "layered-custom"
   | "leaf-spine"
   | "fat-tree"
   | "three-tier"

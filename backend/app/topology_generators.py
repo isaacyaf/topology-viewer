@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from itertools import product
 
@@ -51,6 +52,95 @@ def _connect_all(
     for source in sources:
         for target in targets:
             edges.append(_edge(f"{prefix}-{source}-{target}", source, target, label=label))
+
+
+def _slug(value: str) -> str:
+    slug = re.sub(r"[^a-zA-Z0-9]+", "-", value.strip().lower()).strip("-")
+    return slug or "layer"
+
+
+def generate_layered_custom(
+    layers: list[dict],
+    edge_label: str | None = "link",
+    connection_mode: str = "full-mesh",
+    layout: str | None = None,
+    layer_gap: int | None = None,
+    node_spacing_x: int | None = None,
+) -> GeneratedTopology:
+    if not layers:
+        raise ValueError("At least one layer is required")
+    if connection_mode not in {"full-mesh", "one-to-one", "none"}:
+        raise ValueError("connection_mode must be full-mesh, one-to-one, or none")
+
+    nodes: list[dict] = []
+    edges: list[dict] = []
+    layer_node_ids: list[list[str]] = []
+    used_node_ids: set[str] = set()
+    used_edge_ids: set[str] = set()
+
+    for layer_index, layer in enumerate(layers, start=1):
+        count = max(1, int(layer.get("count") or 1))
+        kind = layer.get("kind") or "switch"
+        tier = max(1, int(layer.get("tier") or 1))
+        base_label = layer.get("label") or layer.get("label_prefix") or f"Layer {tier}"
+        base_id = _slug(layer.get("id") or base_label or f"layer-{layer_index}")
+        if base_id in used_node_ids:
+            base_id = f"{base_id}-{layer_index}"
+        ids: list[str] = []
+        for node_index in range(1, count + 1):
+            node_id = f"{base_id}-{node_index}"
+            while node_id in used_node_ids:
+                node_id = f"{base_id}-{node_index}-{len(used_node_ids) + 1}"
+            used_node_ids.add(node_id)
+            ids.append(node_id)
+
+            label = base_label if count == 1 else f"{base_label} {node_index}"
+            node = _node(node_id, label, kind, tier=tier)
+            node["data"]["layout"] = layout or layer.get("layout") or "tree"
+            if kind == "patch":
+                node["data"]["splitCount"] = max(2, min(1024, int(layer.get("splitCount") or 8)))
+            nodes.append(node)
+        layer_node_ids.append(ids)
+
+    if connection_mode != "none":
+        for layer_index in range(len(layer_node_ids) - 1):
+            sources = layer_node_ids[layer_index]
+            targets = layer_node_ids[layer_index + 1]
+            if connection_mode == "full-mesh":
+                for source in sources:
+                    for target in targets:
+                        edge_id = f"e-{source}-{target}"
+                        while edge_id in used_edge_ids:
+                            edge_id = f"e-{source}-{target}-{len(used_edge_ids) + 1}"
+                        used_edge_ids.add(edge_id)
+                        edges.append(_edge(edge_id, source, target, label=edge_label))
+            if connection_mode == "one-to-one":
+                for pair_index, source in enumerate(sources):
+                    target = targets[pair_index % len(targets)]
+                    edge_id = f"e-{source}-{target}"
+                    while edge_id in used_edge_ids:
+                        edge_id = f"e-{source}-{target}-{len(used_edge_ids) + 1}"
+                    used_edge_ids.add(edge_id)
+                    edges.append(_edge(edge_id, source, target, label=edge_label))
+
+    params = {
+        "layers": layers,
+        "edge_label": edge_label,
+        "connection_mode": connection_mode,
+    }
+    if layout:
+        params["layout"] = layout
+    if layer_gap is not None:
+        params["layerGap"] = layer_gap
+    if node_spacing_x is not None:
+        params["nodeSpacingX"] = node_spacing_x
+
+    return GeneratedTopology(
+        topo_type="layered-custom",
+        params=params,
+        nodes=nodes,
+        edges=edges,
+    )
 
 
 def generate_leaf_spine(

@@ -132,6 +132,34 @@ They operate on the default topology record.
 
 ## Topology Generation
 
+Generator endpoints come in two forms:
+
+- `POST /api/topologies/generate*`: create a new topology from generator input
+- `POST /api/topologies/{id}/generate*`: replace an existing topology with generator output
+
+Use the create form when no topology exists yet, such as after deleting the last topology.
+
+### `POST /api/topologies/generate`
+
+Create a new topology from a supported topology type and parameter set.
+
+The request body is the same as `POST /api/topologies/{id}/generate`.
+
+Example:
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/topologies/generate \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "name": "Generated Leaf-Spine",
+    "topo_type": "leaf-spine",
+    "params": {
+      "spines": 2,
+      "leaves": 4
+    }
+  }'
+```
+
 ### `POST /api/topologies/{id}/generate`
 
 Generate a topology from a supported topology type and parameter set.
@@ -166,6 +194,74 @@ curl -X POST http://127.0.0.1:8000/api/topologies/1/generate \
       "leaf_kind": "switch",
       "edge_label": "uplink"
     }
+  }'
+```
+
+### `POST /api/topologies/generate/layers`
+
+Create a new custom topology from layer definitions.
+
+The request body is the same as `POST /api/topologies/{id}/generate/layers`.
+
+Example:
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/topologies/generate/layers \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "name": "Layered Custom Fabric",
+    "connection_mode": "full-mesh",
+    "layers": [
+      { "id": "core", "label": "Core", "kind": "switch", "tier": 3, "count": 2 },
+      { "id": "leaf", "label": "Leaf", "kind": "switch", "tier": 2, "count": 4 }
+    ]
+  }'
+```
+
+### `POST /api/topologies/{id}/generate/layers`
+
+Generate a full custom topology from layer definitions.
+
+Use this for generator-level workflows where an agent or external generator knows the intended layers, counts, and connection pattern. This replaces the existing topology graph with the generated layer graph.
+
+Fields:
+
+- `name`: optional topology name
+- `topo_type`: optional metadata type, defaults to `layered-custom`
+- `layers`: ordered layer definitions. Adjacent layers are connected in the same order they appear.
+- `edge_label`: optional edge label, defaults to `link`
+- `connection_mode`: `full-mesh`, `one-to-one`, or `none`
+- `layout`: optional `tree` or `grid`
+- `layer_gap`: optional backend auto-layout layer gap
+- `node_spacing_x`: optional backend auto-layout horizontal spacing
+
+Layer fields:
+
+- `id`: optional stable layer id prefix
+- `label`: optional label base
+- `kind`: `rack`, `switch`, `server`, `asic`, `patch`
+- `tier`: numeric tier used by auto-layout
+- `count`: number of nodes in the layer
+- `label_prefix`: optional label prefix when `label` is not provided
+- `splitCount`: patch-panel split count
+- `layout`: optional per-node layout
+
+Example:
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/topologies/1/generate/layers \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "name": "Layered Custom Fabric",
+    "connection_mode": "full-mesh",
+    "edge_label": "uplink",
+    "layer_gap": 220,
+    "node_spacing_x": 220,
+    "layers": [
+      { "id": "core", "label": "Core", "kind": "switch", "tier": 3, "count": 2 },
+      { "id": "leaf", "label": "Leaf", "kind": "switch", "tier": 2, "count": 4 },
+      { "id": "server", "label": "Server", "kind": "server", "tier": 1, "count": 8 }
+    ]
   }'
 ```
 
@@ -363,10 +459,11 @@ Recommended sequence for an AI agent:
 
 1. `GET /api/meta`
 2. `GET /api/topologies` or `POST /api/topologies`
-3. `POST /api/topologies/{id}/generate` if starting from a known topology template
-4. Use node and edge APIs for incremental edits
-5. `POST /api/topologies/{id}/layout` after structural changes
-6. `GET /api/topologies/{id}` to verify final state
+3. `POST /api/topologies/generate` or `POST /api/topologies/{id}/generate` if starting from a known topology template
+4. `POST /api/topologies/generate/layers` or `POST /api/topologies/{id}/generate/layers` if starting from layered generator input
+5. Use node and edge APIs for incremental edits
+6. `POST /api/topologies/{id}/layout` after structural changes
+7. `GET /api/topologies/{id}` to verify final state
 
 ## Error Handling
 
